@@ -158,6 +158,7 @@ export function createWindowElectronMock(overrides?: DeepPartial<MockRecord>) {
       sendCloseDialogResult: vi.fn(),
       sendCloseDialogCancel: vi.fn(),
       selectFolder: vi.fn(),
+      getPathForFile: vi.fn((file: File & { path?: string }) => file.path ?? ""),
       openPath: vi.fn(),
       showNotification: vi.fn(),
       getDataPath: vi.fn(),

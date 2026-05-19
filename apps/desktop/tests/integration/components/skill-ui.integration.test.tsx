@@ -178,6 +178,110 @@ describe("skill ui integration", () => {
     15000,
   );
 
+  it("scans the dropped SKILL.md parent directory on the skills screen", async () => {
+    const scanLocalPreview = vi.fn().mockResolvedValue([]);
+    const showToast = vi.fn();
+    const skillStoreState = createSkillStoreState({
+      scanLocalPreview,
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
+    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useToastMock.mockReturnValue({ showToast });
+
+    installWindowMocks({
+      electron: {
+        getPathForFile: vi.fn(
+          () => "/tmp/skills/novel-writer/SKILL.md",
+        ),
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillManager />, { language: "en" });
+    });
+
+    const dropTarget = screen
+      .getByText("Manage all imported skills in one place, regardless of where they came from.")
+      .closest("div.relative") as HTMLDivElement | null;
+
+    expect(dropTarget).not.toBeNull();
+
+    const file = new File(["# skill"], "SKILL.md", {
+      type: "text/markdown",
+    });
+
+    await act(async () => {
+      fireEvent.drop(dropTarget!, {
+        dataTransfer: {
+          items: [{ kind: "file", type: file.type }],
+          files: [file],
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(scanLocalPreview).toHaveBeenCalledWith([
+        "/tmp/skills/novel-writer",
+      ]);
+    });
+    expect(showToast).toHaveBeenCalledWith(
+      "No importable SKILL.md files were found in the dropped items.",
+      "error",
+    );
+  });
+
+  it("rejects dropped README.md files on the skills screen", async () => {
+    const scanLocalPreview = vi.fn().mockResolvedValue([]);
+    const showToast = vi.fn();
+    const skillStoreState = createSkillStoreState({
+      scanLocalPreview,
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
+    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+    useToastMock.mockReturnValue({ showToast });
+
+    installWindowMocks({
+      electron: {
+        getPathForFile: vi.fn(
+          () => "/tmp/skills/novel-writer/README.md",
+        ),
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillManager />, { language: "en" });
+    });
+
+    const dropTarget = screen
+      .getByText("Manage all imported skills in one place, regardless of where they came from.")
+      .closest("div.relative") as HTMLDivElement | null;
+
+    expect(dropTarget).not.toBeNull();
+
+    const file = new File(["# readme"], "README.md", {
+      type: "text/markdown",
+    });
+
+    await act(async () => {
+      fireEvent.drop(dropTarget!, {
+        dataTransfer: {
+          items: [{ kind: "file", type: file.type }],
+          files: [file],
+        },
+      });
+    });
+
+    expect(scanLocalPreview).not.toHaveBeenCalled();
+    expect(showToast).toHaveBeenCalledWith(
+      "Only local folders or a file named SKILL.md can be imported as skills.",
+      "error",
+    );
+  });
+
   it(
     "creates a snapshot from the detail page through the in-app modal",
     async () => {

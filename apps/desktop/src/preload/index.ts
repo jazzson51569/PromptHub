@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webUtils } from "electron";
 import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import { aiApi } from "./api/ai";
 import { cliApi } from "./api/cli";
@@ -190,6 +190,7 @@ contextBridge.exposeInMainWorld("electron", {
     ipcRenderer.send("window:closeDialogCancel");
   },
   selectFolder: () => ipcRenderer.invoke("dialog:selectFolder"),
+  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   openPath: (path: string) => ipcRenderer.invoke("shell:openPath", path),
   showNotification: (title: string, body: string) =>
     ipcRenderer.invoke("notification:show", { title, body }),
@@ -447,6 +448,7 @@ declare global {
       ) => void;
       sendCloseDialogCancel?: () => void;
       selectFolder?: () => Promise<string | null>;
+      getPathForFile?: (file: File) => string;
       openPath?: (
         path: string,
       ) => Promise<{ success: boolean; error?: string }>;

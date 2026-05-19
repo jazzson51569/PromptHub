@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, lazy, Suspense, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  lazy,
+  Suspense,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import {
   CuboidIcon,
@@ -13,6 +20,7 @@ import {
   SquareIcon,
   XIcon,
   TagsIcon,
+  InboxIcon,
 } from "lucide-react";
 import { SkillGalleryCard } from "./SkillGalleryCard";
 import { SkillRenderBoundary } from "./SkillRenderBoundary";
@@ -63,6 +71,29 @@ const SkillBatchTagDialog = lazy(() =>
     default: m.SkillBatchTagDialog,
   })),
 );
+
+function normalizeDroppedSkillPath(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, "/").trim();
+  if (!normalizedPath) {
+    return "";
+  }
+
+  const lowerPath = normalizedPath.toLowerCase();
+  if (lowerPath.endsWith("/skill.md")) {
+    const slashIndex = normalizedPath.lastIndexOf("/");
+    return slashIndex > 0 ? normalizedPath.slice(0, slashIndex) : normalizedPath;
+  }
+
+  if (lowerPath.endsWith(".md")) {
+    return "";
+  }
+
+  return normalizedPath;
+}
+
+function hasFileItems(dataTransfer: DataTransfer): boolean {
+  return Array.from(dataTransfer.items).some((item) => item.kind === "file");
+}
 
 export function SkillManager() {
   const { t } = useTranslation();
@@ -135,6 +166,7 @@ export function SkillManager() {
   const [scannedSkills, setScannedSkills] = useState<ScannedSkill[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [isDropTargetActive, setIsDropTargetActive] = useState(false);
   const [renderedSkillCount, setRenderedSkillCount] = useState(() =>
     filteredSkills.length <= LARGE_SKILL_LIST_THRESHOLD
       ? filteredSkills.length
@@ -207,6 +239,53 @@ export function SkillManager() {
       setIsScanning(false);
     }
   };
+
+  const handleDropImport = useCallback(
+    async (files: FileList | File[]) => {
+      const droppedPaths = Array.from(files)
+        .map((file) => window.electron?.getPathForFile?.(file) || "")
+        .map(normalizeDroppedSkillPath)
+        .filter((value) => value.length > 0);
+
+      const uniquePaths = Array.from(new Set(droppedPaths));
+      if (uniquePaths.length === 0) {
+        showToast(
+          t(
+            "skill.dropImportUnsupported",
+            "Only local folders or a file named SKILL.md can be imported as skills.",
+          ),
+          "error",
+        );
+        return;
+      }
+
+      setIsScanning(true);
+      try {
+        const result = await scanLocalPreview(uniquePaths);
+        setScannedSkills(result);
+        setShowScanPreview(true);
+
+        if (result.length === 0) {
+          showToast(
+            t(
+              "skill.dropImportEmpty",
+              "No importable SKILL.md files were found in the dropped items.",
+            ),
+            "error",
+          );
+        }
+      } catch (error) {
+        console.error("Failed to import dropped skills:", error);
+        showToast(
+          t("skill.dropImportFailed", "Failed to scan dropped skill files"),
+          "error",
+        );
+      } finally {
+        setIsScanning(false);
+      }
+    },
+    [scanLocalPreview, showToast, t],
+  );
 
   // Re-scan handler passed down to the preview modal
   // 传给预览弹窗的重新扫描回调
@@ -622,7 +701,44 @@ export function SkillManager() {
     : null;
 
   return (
-    <div className="flex-1 flex flex-row h-full app-wallpaper-section overflow-hidden relative">
+    <div
+      className="relative flex flex-1 flex-row h-full overflow-hidden app-wallpaper-section"
+      onDragEnter={(event) => {
+        if (!hasFileItems(event.dataTransfer)) {
+          return;
+        }
+
+        event.preventDefault();
+        setIsDropTargetActive(true);
+      }}
+      onDragOver={(event) => {
+        if (!hasFileItems(event.dataTransfer)) {
+          return;
+        }
+
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        if (!isDropTargetActive) {
+          setIsDropTargetActive(true);
+        }
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          return;
+        }
+
+        setIsDropTargetActive(false);
+      }}
+      onDrop={(event) => {
+        if (!hasFileItems(event.dataTransfer)) {
+          return;
+        }
+
+        event.preventDefault();
+        setIsDropTargetActive(false);
+        void handleDropImport(event.dataTransfer.files);
+      }}
+    >
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="border-b border-border app-wallpaper-panel-strong px-4 py-4 z-10 sm:px-6">
@@ -988,6 +1104,29 @@ export function SkillManager() {
         confirmText={t("common.delete", "Delete")}
         cancelText={t("common.cancel", "Cancel")}
       />
+
+      {isDropTargetActive ? (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="mx-6 w-full max-w-2xl rounded-3xl border border-primary/30 bg-background/95 px-8 py-10 shadow-2xl">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/25">
+                <InboxIcon className="h-8 w-8" />
+              </div>
+              <div className="space-y-2">
+                <div className="text-lg font-semibold text-foreground">
+                  {t("skill.dropImportTitle", "Drop skills to import")}
+                </div>
+                <div className="text-sm leading-6 text-muted-foreground">
+                  {t(
+                    "skill.dropImportDesc",
+                    "Drop a skill folder or a file named SKILL.md here to open the existing scan preview and import flow.",
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
