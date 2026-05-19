@@ -35,7 +35,9 @@ import { UpdateDialog, UpdateStatus } from "./components/UpdateDialog";
 import { CloseDialog } from "./components/ui/CloseDialog";
 import { DataRecoveryDialog } from "./components/ui/DataRecoveryDialog";
 import { BackgroundImageBackdrop } from "./components/ui/BackgroundImageBackdrop";
+import { BackupImportConfirmDialog } from "./components/settings/BackupImportConfirmDialog";
 import { isWebRuntime } from "./runtime";
+import { useBackupImportController } from "./hooks/useBackupImportController";
 
 // Lazy load heavy components for better initial load performance
 // 懒加载大型组件以提升初始加载性能
@@ -79,6 +81,7 @@ function App() {
   const [currentPage, setCurrentPage] = useState<PageType>("home");
   const [isLoading, setIsLoading] = useState(true);
   const { showToast } = useToast();
+  const backupImportController = useBackupImportController();
 
   const clipboardImportEnabled = useSettingsStore(
     (state) => state.clipboardImportEnabled,
@@ -145,9 +148,10 @@ function App() {
   const renderedBackgroundImageOpacity = getRenderedBackgroundImageOpacity(
     backgroundImageOpacity,
   );
+  const webRuntime = isWebRuntime();
 
   useEffect(() => {
-    if (isWebRuntime()) {
+    if (webRuntime) {
       return;
     }
 
@@ -1067,7 +1071,7 @@ function App() {
         >
           {/* Windows title bar */}
           {/* Windows 标题栏 */}
-          {!isWebRuntime() && <TitleBar />}
+          {!webRuntime && <TitleBar />}
 
           <div className="flex flex-1 overflow-y-hidden overflow-x-visible">
             <Sidebar
@@ -1105,7 +1109,10 @@ function App() {
                         </div>
                       }
                     >
-                      <SettingsPage onBack={() => setCurrentPage("home")} />
+                      <SettingsPage
+                        onBack={() => setCurrentPage("home")}
+                        backupImportController={backupImportController}
+                      />
                     </Suspense>
                   )}
                 </div>
@@ -1131,6 +1138,15 @@ function App() {
             isOpen={showRecoveryDialog}
             onClose={() => setShowRecoveryDialog(false)}
             databases={recoverableDatabases}
+          />
+
+          <BackupImportConfirmDialog
+            importPreview={backupImportController.importPreview}
+            confirmingImport={backupImportController.confirmingImport}
+            onClose={backupImportController.closeImportPreview}
+            onConfirm={() => {
+              void backupImportController.confirmImport();
+            }}
           />
 
           {/* Use EditPromptModal for importing, passing clipboard data as initialData */}

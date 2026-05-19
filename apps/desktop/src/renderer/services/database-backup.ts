@@ -78,6 +78,22 @@ const VIDEO_BATCH_SIZE = 5;
 const VIDEO_MAX_SIZE_BYTES = 100 * 1024 * 1024;
 const VIDEO_MAX_COUNT = 100;
 const SKILL_CONCURRENCY = 5;
+const SUPPORTED_BACKUP_EXTENSIONS = [".phub.gz", ".json", ".phub", ".gz", ".zip"];
+
+export const BACKUP_IMPORT_ACCEPT = ".json,.phub,.gz,.zip";
+
+export function isSupportedBackupFileName(fileName: string): boolean {
+  const normalized = fileName.trim().toLowerCase();
+  return SUPPORTED_BACKUP_EXTENSIONS.some((extension) =>
+    normalized.endsWith(extension),
+  );
+}
+
+export function pickSupportedBackupFile(files: FileList | File[]): File | null {
+  return (
+    Array.from(files).find((file) => isSupportedBackupFileName(file.name)) ?? null
+  );
+}
 
 interface MediaCollectionLimits {
   maxCount?: number;

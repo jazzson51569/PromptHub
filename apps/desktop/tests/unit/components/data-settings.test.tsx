@@ -43,9 +43,13 @@ vi.mock("../../../src/renderer/stores/skill.store", () => ({
 }));
 
 vi.mock("../../../src/renderer/services/database-backup", () => ({
+  BACKUP_IMPORT_ACCEPT: ".json,.phub,.gz,.zip",
   downloadBackup: vi.fn(),
   downloadCompressedBackup: vi.fn(),
   downloadSelectiveExport: vi.fn(),
+  pickSupportedBackupFile: vi.fn((files: FileList | File[]) =>
+    Array.from(files)[0] ?? null,
+  ),
   previewImportFile: vi.fn(),
   restoreFromFile: vi.fn(),
 }));
@@ -671,6 +675,52 @@ describe("DataSettings", { timeout: 15_000 }, () => {
       "Import failed: Selective export file is corrupted",
       "error",
     );
+  });
+
+  it("accepts dropping a backup file into the backup restore target", async () => {
+    const beginImportFromFile = vi.fn().mockResolvedValue(undefined);
+    const showToast = vi.fn();
+    useToastMock.mockReturnValue({ showToast });
+
+    await act(async () => {
+      await renderWithI18n(
+        <DataSettings
+          activeSubsection="backup"
+          backupImportController={{
+            requestFileSelection: vi.fn(),
+            beginImportFromFile,
+          }}
+        />,
+        {
+          language: "en",
+        },
+      );
+    });
+
+    const heading = screen.getByText("Drag to Restore Backup");
+    const dropTarget = heading.closest("div.rounded-xl") as HTMLDivElement | null;
+    expect(dropTarget).not.toBeNull();
+
+    const file = new File(["backup"], "prompthub-export.phub.gz", {
+      type: "application/gzip",
+    });
+
+    fireEvent.dragEnter(dropTarget!, {
+      dataTransfer: {
+        items: [{ kind: "file", type: file.type }],
+        files: [file],
+      },
+    });
+    fireEvent.drop(dropTarget!, {
+      dataTransfer: {
+        items: [{ kind: "file", type: file.type }],
+        files: [file],
+      },
+    });
+
+    await waitFor(() => {
+      expect(beginImportFromFile).toHaveBeenCalledWith(file);
+    });
   });
 
   it("tests a self-hosted PromptHub connection from desktop settings", async () => {

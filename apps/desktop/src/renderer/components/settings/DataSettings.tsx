@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import type { ReactNode } from "react";
+import { useState, useEffect, useMemo } from "react";
+import type { DragEvent, ReactNode } from "react";
 import {
   FolderIcon,
   CloudIcon,
@@ -15,20 +15,18 @@ import {
   XIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  InboxIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   downloadSelectiveExport,
-  previewImportFile,
-  restoreFromFile,
+  pickSupportedBackupFile,
 } from "../../services/database-backup";
 import {
-  createUpgradeBackup,
   deleteUpgradeBackup,
   listUpgradeBackups,
   restoreUpgradeBackup,
 } from "../../services/upgrade-backup";
-import { hasAnySkipped } from "../../services/database-backup-format";
 import { clearDatabase } from "../../services/database";
 import {
   runFullExportBackup,
@@ -56,7 +54,8 @@ import {
 } from "./shared";
 import { isWebRuntime } from "../../runtime";
 import type { RecoveryCandidate, UpgradeBackupEntry } from "@prompthub/shared/types";
-import type { ImportPreviewSummary } from "../../services/database-backup";
+import { useBackupImportController } from "../../hooks/useBackupImportController";
+import { BackupImportConfirmDialog } from "./BackupImportConfirmDialog";
 
 const MANUAL_RECOVERY_PATHS_STORAGE_KEY = "prompthub-manual-recovery-paths";
 const DEFAULT_VISIBLE_UPGRADE_BACKUPS = 3;
@@ -147,6 +146,11 @@ function getErrorMessage(error: unknown): string {
   return "Unknown error";
 }
 
+interface BackupImportControllerLike {
+  requestFileSelection: () => void;
+  beginImportFromFile: (file: File) => Promise<void>;
+}
+
 function DataSettingsSection({
   title,
   children,
@@ -191,9 +195,13 @@ function getSyncProviderOptionLabel(
  */
 interface DataSettingsProps {
   activeSubsection?: DataSettingsSubsectionId;
+  backupImportController?: BackupImportControllerLike;
 }
 
-export function DataSettings({ activeSubsection = "local" }: DataSettingsProps) {
+export function DataSettings({
+  activeSubsection = "local",
+  backupImportController,
+}: DataSettingsProps) {
   const { t } = useTranslation();
   const translateLabel = (key: string, fallback: string): string => t(key, fallback);
   const { showToast } = useToast();
@@ -211,11 +219,6 @@ export function DataSettings({ activeSubsection = "local" }: DataSettingsProps) 
   const [showAllUpgradeBackups, setShowAllUpgradeBackups] = useState(false);
   const [restoreCandidate, setRestoreCandidate] = useState<UpgradeBackupEntry | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<UpgradeBackupEntry | null>(null);
-  const [importPreview, setImportPreview] = useState<{
-    file: File;
-    summary: ImportPreviewSummary;
-  } | null>(null);
-  const [confirmingImport, setConfirmingImport] = useState(false);
   const [manualRecoveryPaths, setManualRecoveryPaths] = useState<string[]>([]);
   const [manualPathInputValue, setManualPathInputValue] = useState("");
   const [scanningRecoverySources, setScanningRecoverySources] = useState(false);
@@ -228,6 +231,10 @@ export function DataSettings({ activeSubsection = "local" }: DataSettingsProps) 
   const [dataPathActionLoading, setDataPathActionLoading] = useState(false);
   const [cacheSize, setCacheSize] = useState<number | null>(null);
   const [clearingCache, setClearingCache] = useState(false);
+  const [isBackupDropTargetActive, setIsBackupDropTargetActive] = useState(false);
+  const localBackupImportController = useBackupImportController();
+  const effectiveBackupImportController =
+    backupImportController ?? localBackupImportController;
 
   useEffect(() => {
     void window.electron?.getCacheSize?.().then((res) => setCacheSize(res.size));
@@ -442,79 +449,35 @@ export function DataSettings({ activeSubsection = "local" }: DataSettingsProps) 
   };
 
   const handleImportBackup = () => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".json,.phub,.gz,.zip";
-    input.onchange = async (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        try {
-          const preview = await previewImportFile(file);
-          setImportPreview({ file, summary: preview.summary });
-        } catch (error) {
-          console.error("Import failed:", error);
-          showToast(
-            `${t("toast.importFailed")}: ${getErrorMessage(error)}`,
-            "error",
-          );
-        }
-      }
-    };
-    input.click();
+    effectiveBackupImportController.requestFileSelection();
   };
 
-  const formatSkippedDetails = (skipped: ImportPreviewSummary["skipped"]): string => {
-    return [
-      skipped.prompts > 0 ? `prompts: ${skipped.prompts}` : null,
-      skipped.folders > 0 ? `folders: ${skipped.folders}` : null,
-      skipped.versions > 0 ? `versions: ${skipped.versions}` : null,
-      skipped.rules > 0 ? `rules: ${skipped.rules}` : null,
-      skipped.skills > 0 ? `skills: ${skipped.skills}` : null,
-      skipped.skillVersions > 0 ? `skill versions: ${skipped.skillVersions}` : null,
-      skipped.skillFiles > 0 ? `skill files: ${skipped.skillFiles}` : null,
-    ]
-      .filter((part): part is string => part !== null)
-      .join(", ");
-  };
+  const backupDropDescription = useMemo(
+    () =>
+      t(
+        "settings.backupDropRestoreDesc",
+        "Drag a PromptHub backup archive here to review and restore it quickly.",
+      ),
+    [t],
+  );
 
-  const handleConfirmImportBackup = async () => {
-    if (!importPreview) {
+  const handleBackupDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setIsBackupDropTargetActive(false);
+
+    const file = pickSupportedBackupFile(event.dataTransfer.files);
+    if (!file) {
+      showToast(
+        t(
+          "settings.backupDropUnsupported",
+          "Please drop a PromptHub backup file (.json, .phub.gz, .gz, or .zip).",
+        ),
+        "error",
+      );
       return;
     }
 
-    setConfirmingImport(true);
-    try {
-      if (!webRuntime) {
-        await createUpgradeBackup({
-          fromVersion: currentVersion || undefined,
-          toVersion: currentVersion || undefined,
-        });
-        await refreshUpgradeBackups();
-      }
-
-      const skipped = await restoreFromFile(importPreview.file);
-      if (hasAnySkipped(skipped)) {
-        showToast(
-          t("toast.importPartialSuccess", {
-            details: formatSkippedDetails(skipped),
-          }),
-          "success",
-        );
-      } else {
-        showToast(t("toast.importSuccess"), "success");
-      }
-
-      setImportPreview(null);
-      setTimeout(() => window.location.reload(), 1000);
-    } catch (error) {
-      console.error("Import failed:", error);
-      showToast(
-        `${t("toast.importFailed")}: ${getErrorMessage(error)}`,
-        "error",
-      );
-    } finally {
-      setConfirmingImport(false);
-    }
+    await effectiveBackupImportController.beginImportFromFile(file);
   };
 
   const handleClearData = async () => {
@@ -2220,6 +2183,68 @@ export function DataSettings({ activeSubsection = "local" }: DataSettingsProps) 
                 </button>
               </div>
             </div>
+
+            <div
+              onDragOver={(event) => {
+                event.preventDefault();
+                if (
+                  Array.from(event.dataTransfer.items).some(
+                    (item) => item.kind === "file",
+                  )
+                ) {
+                  setIsBackupDropTargetActive(true);
+                }
+              }}
+              onDragEnter={(event) => {
+                event.preventDefault();
+                if (
+                  Array.from(event.dataTransfer.items).some(
+                    (item) => item.kind === "file",
+                  )
+                ) {
+                  setIsBackupDropTargetActive(true);
+                }
+              }}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setIsBackupDropTargetActive(false);
+                }
+              }}
+              onDrop={(event) => {
+                void handleBackupDrop(event);
+              }}
+              className={`rounded-xl border border-dashed px-4 py-5 transition-colors ${
+                isBackupDropTargetActive
+                  ? "border-primary bg-primary/8"
+                  : "border-border bg-muted/15"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                    isBackupDropTargetActive
+                      ? "bg-primary text-white"
+                      : "bg-muted text-muted-foreground"
+                  }`}
+                >
+                  <InboxIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="text-sm font-medium text-foreground">
+                    {t("settings.backupDropRestore", "拖拽恢复备份")}
+                  </div>
+                  <div className="text-xs leading-5 text-muted-foreground">
+                    {backupDropDescription}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground/80">
+                    {t(
+                      "settings.backupDropRestoreFormats",
+                      "Supported: .json, .phub.gz, .gz, .zip",
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           {!webRuntime ? (
@@ -2713,53 +2738,6 @@ export function DataSettings({ activeSubsection = "local" }: DataSettingsProps) 
         variant="destructive"
       />
 
-      <ConfirmDialog
-        isOpen={importPreview !== null}
-        onClose={() => {
-          if (!confirmingImport) {
-            setImportPreview(null);
-          }
-        }}
-        onConfirm={() => {
-          void handleConfirmImportBackup();
-        }}
-        title={t("settings.importPreviewTitle", "Review import summary")}
-        message={
-          importPreview ? (
-            <div className="space-y-2 text-left">
-              <p>
-                {t("settings.importPreviewFile", "File")}: {importPreview.file.name}
-              </p>
-              <p>
-                {t("settings.importPreviewExportedAt", "Exported at")}: {new Date(
-                  importPreview.summary.exportedAt,
-                ).toLocaleString()}
-              </p>
-              <p>
-                {t("settings.importPreviewCounts", "Will import")}: {importPreview.summary.counts.prompts} prompts, {importPreview.summary.counts.folders} folders, {importPreview.summary.counts.versions} versions, {importPreview.summary.counts.rules} rules, {importPreview.summary.counts.skills} skills
-              </p>
-              <p>
-                {t(
-                  "settings.importPreviewBackupNotice",
-                  "PromptHub will automatically create a local safety backup of your current state before importing.",
-                )}
-              </p>
-              {hasAnySkipped(importPreview.summary.skipped) ? (
-                <p>
-                  {t("settings.importPreviewSkipped", "Invalid records that will be skipped")}: {formatSkippedDetails(importPreview.summary.skipped)}
-                </p>
-              ) : null}
-            </div>
-          ) : (
-            ""
-          )
-        }
-        confirmText={t("settings.importConfirmAction", "Back up current data and import")}
-        cancelText={t("common.cancel", "Cancel")}
-        variant="destructive"
-        isLoading={confirmingImport}
-      />
-
       <DataRecoveryDialog
         isOpen={showRecoveryBrowser}
         onClose={() => setShowRecoveryBrowser(false)}
@@ -2769,6 +2747,17 @@ export function DataSettings({ activeSubsection = "local" }: DataSettingsProps) 
         allowStartFresh={false}
         currentPromptCount={currentPromptCount}
       />
+
+      {backupImportController ? null : (
+        <BackupImportConfirmDialog
+          importPreview={localBackupImportController.importPreview}
+          confirmingImport={localBackupImportController.confirmingImport}
+          onClose={localBackupImportController.closeImportPreview}
+          onConfirm={() => {
+            void localBackupImportController.confirmImport();
+          }}
+        />
+      )}
     </>
   );
 }

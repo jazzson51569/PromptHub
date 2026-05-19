@@ -35,8 +35,14 @@ import { WebWorkspaceSettings } from "./WebWorkspaceSettings";
 import { useSettingsStore } from "../../stores/settings.store";
 import { isWebRuntime } from "../../runtime";
 
+interface BackupImportControllerLike {
+  requestFileSelection: () => void;
+  beginImportFromFile: (file: File) => Promise<void>;
+}
+
 interface SettingsPageProps {
   onBack: () => void;
+  backupImportController?: BackupImportControllerLike;
 }
 
 // Settings menu items - use i18n keys instead of hardcoded text
@@ -131,7 +137,7 @@ const DATA_SETTINGS_SUBMENU_GROUPS: Array<{
   },
 ];
 
-export function SettingsPage({ onBack }: SettingsPageProps) {
+export function SettingsPage({ onBack, backupImportController }: SettingsPageProps) {
   const webRuntime = isWebRuntime();
   const settingsMenu = webRuntime ? WEB_SETTINGS_MENU : DESKTOP_SETTINGS_MENU;
   const syncProvider = useSettingsStore((state) => state.syncProvider);
@@ -160,7 +166,12 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
       case "security":
         return <SecuritySettings />;
       case "data":
-        return <DataSettings activeSubsection={activeDataSubsection} />;
+        return (
+          <DataSettings
+            activeSubsection={activeDataSubsection}
+            backupImportController={backupImportController}
+          />
+        );
       case "skill":
         return <SkillSettings />;
       case "ai":
