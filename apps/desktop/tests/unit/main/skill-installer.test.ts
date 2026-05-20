@@ -603,6 +603,37 @@ describe("SkillInstaller external repo by-path access", () => {
     ).rejects.toThrow();
   });
 
+  it("accepts a SKILL.md file path as the by-path repo base", async () => {
+    const repoPath = path.join(tmpDir, "project", ".claude", "skills", "novel-file-base");
+    const skillMdPath = path.join(repoPath, "SKILL.md");
+    await fs.mkdir(repoPath, { recursive: true });
+    await fs.writeFile(skillMdPath, "---\nname: novel-file-base\n---\n# Novel File Base\n");
+
+    const files = await SkillInstaller.listLocalRepoFilesByPath(skillMdPath);
+    expect(files).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "SKILL.md", isDirectory: false }),
+      ]),
+    );
+
+    const skillMd = await SkillInstaller.readLocalRepoFileByPath(
+      skillMdPath,
+      "SKILL.md",
+    );
+    expect(skillMd?.content).toContain("# Novel File Base");
+
+    await SkillInstaller.writeLocalRepoFileByPath(
+      skillMdPath,
+      "notes.txt",
+      "hello file-base skill",
+    );
+    const note = await SkillInstaller.readLocalRepoFileByPath(
+      skillMdPath,
+      "notes.txt",
+    );
+    expect(note?.content).toBe("hello file-base skill");
+  });
+
   it("still rejects traversal outside an external project skill root", async () => {
     const repoPath = path.join(tmpDir, "project", "skills", "safe-skill");
     await fs.mkdir(repoPath, { recursive: true });
@@ -1272,6 +1303,23 @@ describe("SkillInstaller.scanLocalPreview", () => {
     expect(names).toContain("skill-from-a");
     expect(names).toContain("skill-from-b");
     expect(results).toHaveLength(2);
+  });
+
+  it("treats a custom path that is itself a skill directory as importable", async () => {
+    await SkillInstaller.init();
+
+    const dir = path.join(tmpDir, "direct-skill-dir");
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(
+      path.join(dir, "SKILL.md"),
+      `---\nname: direct-skill\ndescription: Direct skill dir\n---\n\n# direct-skill\n`,
+    );
+
+    const results = await SkillInstaller.scanLocalPreview([dir]);
+
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe("direct-skill");
+    expect(results[0].localPath).toBe(dir);
   });
 
   it("returns empty array for non-existent customPath", async () => {

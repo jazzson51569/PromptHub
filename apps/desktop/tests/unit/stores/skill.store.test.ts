@@ -727,6 +727,76 @@ description: Use this skill for PDF tasks.
     );
   });
 
+  it("updates a local store source even when source_url points at SKILL.md", async () => {
+    const versionCreate = vi.fn().mockResolvedValue({ id: "version-local-file" });
+    const update = vi.fn().mockImplementation(async (_id, data) => ({
+      ...createSkillFixture({ id: "skill-local-file", name: "local-writer" }),
+      ...data,
+      id: "skill-local-file",
+      updated_at: 2,
+    }));
+
+    (window as any).api.skill.versionCreate = versionCreate;
+    (window as any).api.skill.update = update;
+    (window as any).api.skill.readLocalFileByPath = vi.fn().mockResolvedValue({
+      content: "# Local Writer\n\nLatest disk content\n",
+    });
+
+    const originalHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash("# Local Writer\n\nOriginal content\n");
+
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-local-file",
+          name: "local-writer",
+          registry_slug: "local-writer",
+          content: "# Local Writer\n\nOriginal content\n",
+          instructions: "# Local Writer\n\nOriginal content\n",
+          installed_content_hash: originalHash,
+          installed_version: "1.0.0",
+        }),
+      ],
+      registrySkills: [],
+      remoteStoreEntries: {
+        local: {
+          loadedAt: 1,
+          error: null,
+          skills: [
+            {
+              slug: "local-writer",
+              name: "Local Writer",
+              description: "Local source skill",
+              category: "general",
+              author: "Local",
+              source_url: "/tmp/local-writer/SKILL.md",
+              content_url: "/tmp/local-writer/SKILL.md",
+              tags: ["local"],
+              version: "1.1.0",
+              content: "# Local Writer\n\nStale cached content\n",
+            },
+          ],
+        },
+      },
+    });
+
+    const result = await useSkillStore.getState().updateRegistrySkill("local-writer");
+
+    expect(result?.status).toBe("updated");
+    expect((window as any).api.skill.readLocalFileByPath).toHaveBeenCalledWith(
+      "/tmp/local-writer",
+      "SKILL.md",
+    );
+    expect(update).toHaveBeenCalledWith(
+      "skill-local-file",
+      expect.objectContaining({
+        content: "# Local Writer\n\nLatest disk content\n",
+        instructions: "# Local Writer\n\nLatest disk content\n",
+      }),
+    );
+  });
+
   it("refuses registry updates when local content was edited unless overwrite is requested", async () => {
     const remoteContent = "# Writer\n\nRemote update\n";
     (window as any).api.skill.fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);

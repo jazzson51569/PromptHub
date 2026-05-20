@@ -188,4 +188,102 @@ describe("SkillStore custom sources", () => {
       screen.getByText("Try a different search or category"),
     ).toBeInTheDocument();
   });
+
+  it("refreshes a local directory source from the latest SKILL.md on disk", async () => {
+    const scanLocalPreview = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          name: "local-writer",
+          description: "Local source skill",
+          version: "1.0.0",
+          author: "Local",
+          tags: ["local"],
+          instructions: "# Local Writer\n\nOld content\n",
+          filePath: "/tmp/local-writer/SKILL.md",
+          localPath: "/tmp/local-writer",
+          platforms: ["Custom"],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          name: "local-writer",
+          description: "Local source skill",
+          version: "1.1.0",
+          author: "Local",
+          tags: ["local"],
+          instructions: "# Local Writer\n\nNew content\n",
+          filePath: "/tmp/local-writer/SKILL.md",
+          localPath: "/tmp/local-writer",
+          platforms: ["Custom"],
+        },
+      ]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn().mockResolvedValue(JSON.stringify({ skills: [] })),
+          scanLocalPreview,
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      storeView: "store",
+      customStoreSources: [
+        {
+          id: "custom-local",
+          name: "Local Skills",
+          type: "local-dir",
+          url: "/tmp/local-writer",
+          enabled: true,
+          order: 0,
+          createdAt: Date.now(),
+        },
+      ],
+      selectedStoreSourceId: "custom-local",
+    } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(
+        useSkillStore.getState().remoteStoreEntries["custom-local"]?.skills[0]?.content,
+      ).toContain("Old content");
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    });
+
+    await waitFor(() => {
+      expect(
+        useSkillStore.getState().remoteStoreEntries["custom-local"]?.skills[0]?.content,
+      ).toContain("New content");
+    });
+    expect(
+      useSkillStore.getState().remoteStoreEntries["custom-local"]?.skills[0]?.content,
+    ).not.toContain("Old content");
+    expect(scanLocalPreview).toHaveBeenNthCalledWith(
+      1,
+      ["/tmp/local-writer"],
+      undefined,
+    );
+    expect(scanLocalPreview).toHaveBeenNthCalledWith(
+      2,
+      ["/tmp/local-writer"],
+      undefined,
+    );
+  });
 });

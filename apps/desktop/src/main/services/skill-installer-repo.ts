@@ -75,6 +75,12 @@ const TEXT_EXTENSIONS = new Set([
 
 const INTERNAL_REPO_DIRS = new Set([".git", ".prompthub"]);
 
+function normalizeRepoBaseDirectory(absolutePath: string): string {
+  return /[\\/]SKILL\.md$/i.test(absolutePath)
+    ? path.dirname(absolutePath)
+    : absolutePath;
+}
+
 export function isInternalSkillRepoEntry(relativePath: string): boolean {
   return relativePath
     .split(/[\\/]+/)
@@ -294,15 +300,16 @@ export async function readLocalRepoFiles(
 export async function readLocalRepoFilesByPath(
   absolutePath: string,
 ): Promise<SkillLocalFileEntry[]> {
-  const { realBasePath } = await resolveRepoBasePath(absolutePath, {
+  const normalizedBasePath = normalizeRepoBaseDirectory(absolutePath);
+  const { realBasePath } = await resolveRepoBasePath(normalizedBasePath, {
     allowOutsideSkillsDir: true,
   });
 
-  if (!(await fileExists(absolutePath))) {
+  if (!(await fileExists(normalizedBasePath))) {
     return [];
   }
 
-  const baseDir = absolutePath;
+  const baseDir = normalizedBasePath;
 
   return walkRepoDir<SkillLocalFileEntry>({
     baseDir,
@@ -320,15 +327,16 @@ export async function readLocalRepoFilesByPath(
 export async function readLocalRepoFileBuffersByPath(
   absolutePath: string,
 ): Promise<SkillLocalFileBufferEntry[]> {
-  const { realBasePath } = await resolveRepoBasePath(absolutePath, {
+  const normalizedBasePath = normalizeRepoBaseDirectory(absolutePath);
+  const { realBasePath } = await resolveRepoBasePath(normalizedBasePath, {
     allowOutsideSkillsDir: true,
   });
 
-  if (!(await fileExists(absolutePath))) {
+  if (!(await fileExists(normalizedBasePath))) {
     return [];
   }
 
-  const baseDir = absolutePath;
+  const baseDir = normalizedBasePath;
 
   return walkRepoDir<SkillLocalFileBufferEntry>({
     baseDir,
@@ -359,15 +367,16 @@ export async function listLocalRepoFiles(
 export async function listLocalRepoFilesByPath(
   absolutePath: string,
 ): Promise<SkillLocalFileTreeEntry[]> {
-  const { realBasePath } = await resolveRepoBasePath(absolutePath, {
+  const normalizedBasePath = normalizeRepoBaseDirectory(absolutePath);
+  const { realBasePath } = await resolveRepoBasePath(normalizedBasePath, {
     allowOutsideSkillsDir: true,
   });
 
-  if (!(await fileExists(absolutePath))) {
+  if (!(await fileExists(normalizedBasePath))) {
     return [];
   }
 
-  const baseDir = absolutePath;
+  const baseDir = normalizedBasePath;
 
   return walkRepoDir<SkillLocalFileTreeEntry>({
     baseDir,
@@ -397,8 +406,9 @@ export async function readLocalRepoFileByPath(
   absoluteBasePath: string,
   relativePath: string,
 ): Promise<SkillLocalFileEntry | null> {
+  const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
   const { fullPath, realBasePath } = await resolveRepoTargetPath(
-    absoluteBasePath,
+    normalizedBasePath,
     relativePath,
     { allowOutsideSkillsDir: true },
   );
@@ -458,8 +468,9 @@ export async function writeLocalRepoFileByPath(
   content: string,
 ): Promise<void> {
   await initSkillsDir();
+  const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
   const { fullPath } = await resolveRepoTargetPath(
-    absoluteBasePath,
+    normalizedBasePath,
     relativePath,
     { ensureBaseExists: true, allowOutsideSkillsDir: true },
   );
@@ -490,8 +501,9 @@ export async function deleteLocalRepoFileByPath(
   absoluteBasePath: string,
   relativePath: string,
 ): Promise<void> {
+  const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
   const { fullPath } = await resolveRepoTargetPath(
-    absoluteBasePath,
+    normalizedBasePath,
     relativePath,
     { allowOutsideSkillsDir: true },
   );
@@ -530,8 +542,9 @@ export async function createLocalRepoDirByPath(
   relativePath: string,
 ): Promise<void> {
   await initSkillsDir();
+  const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
   const { fullPath } = await resolveRepoTargetPath(
-    absoluteBasePath,
+    normalizedBasePath,
     relativePath,
     { ensureBaseExists: true, allowOutsideSkillsDir: true },
   );
@@ -545,13 +558,14 @@ export async function renameLocalRepoPathByPath(
   oldRelativePath: string,
   newRelativePath: string,
 ): Promise<void> {
+  const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
   const { fullPath: oldFullPath } = await resolveRepoTargetPath(
-    absoluteBasePath,
+    normalizedBasePath,
     oldRelativePath,
     { allowOutsideSkillsDir: true },
   );
   const { fullPath: newFullPath } = await resolveRepoTargetPath(
-    absoluteBasePath,
+    normalizedBasePath,
     newRelativePath,
     { ensureBaseExists: true, allowOutsideSkillsDir: true },
   );
@@ -682,7 +696,8 @@ export async function replaceLocalRepoFilesByPath(
   absoluteBasePath: string,
   filesSnapshot: { relativePath: string; content: string }[],
 ): Promise<void> {
-  const { resolvedBasePath } = await resolveRepoBasePath(absoluteBasePath, {
+  const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const { resolvedBasePath } = await resolveRepoBasePath(normalizedBasePath, {
     ensureExists: true,
   });
 

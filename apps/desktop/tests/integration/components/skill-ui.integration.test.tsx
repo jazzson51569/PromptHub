@@ -437,4 +437,68 @@ describe("skill ui integration", () => {
     },
     15000,
   );
+
+  it("reads project detail SKILL.md content when source_url points to the SKILL.md file", async () => {
+    const projectFileSkill = createSkillFixture({
+      id: "project-file-skill",
+      name: "project-file-skill",
+      source_url: "/tmp/project-skill/SKILL.md",
+      local_repo_path: null,
+      instructions: "# Project Skill\n\nCached content",
+      content: "# Project Skill\n\nCached content",
+    });
+
+    const skillStoreState = createSkillStoreState({
+      skills: [projectFileSkill],
+      selectedSkillId: projectFileSkill.id,
+      syncSkillFromRepo: vi.fn(),
+    });
+    const settingsState = createSettingsState();
+
+    installWindowMocks({
+      api: {
+        skill: {
+          readLocalFiles: vi.fn().mockResolvedValue([
+            createSkillLocalFileEntryFixture(),
+          ]),
+          readLocalFileByPath: vi.fn().mockResolvedValue({
+            path: "SKILL.md",
+            content: "# Project Skill\n\nLatest project content",
+            isDirectory: false,
+          }),
+          versionCreate: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+    });
+
+    useSkillStoreMock.mockImplementation((selector) => selector(skillStoreState));
+    useSettingsStoreMock.mockImplementation((selector) => selector(settingsState));
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillFullDetailPage
+          projectContext={{
+            project: {
+              id: "project-1",
+              name: "Project 1",
+              rootPath: "/tmp/project-skill",
+              scanPaths: [],
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          }}
+        />,
+        {
+          language: "en",
+        },
+      );
+    });
+
+    await waitFor(() => {
+      expect(window.api.skill.readLocalFileByPath).toHaveBeenCalledWith(
+        "/tmp/project-skill",
+        "SKILL.md",
+      );
+    });
+  });
 });

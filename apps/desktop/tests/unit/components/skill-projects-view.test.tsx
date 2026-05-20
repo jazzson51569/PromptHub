@@ -170,6 +170,17 @@ describe("SkillProjectsView", () => {
     expect(screen.queryByText("Register project directories and manage their local skills.")).not.toBeInTheDocument();
     expect(screen.queryByText("Build story arcs and chapter beats")).not.toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Import to My Skills" }));
+
+    await waitFor(() => {
+      expect(useSkillStore.getState().importScannedSkills).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: "novel-auditor",
+          localPath: "/tmp/novel/.claude/skills/novel-auditor",
+        }),
+      ]);
+    });
+
     fireEvent.click(screen.getByRole("button", { name: /back/i }));
 
     expect(screen.queryByText("Source / Content")).not.toBeInTheDocument();

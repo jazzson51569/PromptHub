@@ -30,6 +30,7 @@ import { normalizeSkill, normalizeSkills } from "../services/skill-normalize";
 import {
   validateStoreSourceInput,
   isLikelyLocalSource,
+  normalizeLocalSkillDirectoryPath,
   type CustomStoreSourceType,
 } from "../services/skill-store-source";
 import {
@@ -278,12 +279,23 @@ function isLocalRegistrySkill(skill: Pick<RegistrySkill, "content_url" | "source
   );
 }
 
+function normalizeLocalRegistryDirectory(
+  regSkill: Pick<RegistrySkill, "content_url" | "source_url">,
+): string {
+  const candidates = [regSkill.content_url, regSkill.source_url]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => normalizeLocalSkillDirectoryPath(value));
+
+  return candidates[0] ?? "";
+}
+
 async function resolveRegistrySkillContent(
   regSkill: RegistrySkill,
 ): Promise<string> {
   if (typeof regSkill.content_url === "string" && isLikelyLocalSource(regSkill.content_url)) {
+    const localDir = normalizeLocalRegistryDirectory(regSkill);
     const localSkillMd = await window.api.skill.readLocalFileByPath(
-      regSkill.source_url || "",
+      localDir,
       "SKILL.md",
     );
     if (localSkillMd?.content?.trim()) {

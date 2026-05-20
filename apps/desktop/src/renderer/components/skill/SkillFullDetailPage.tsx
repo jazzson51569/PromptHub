@@ -25,6 +25,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { SkillPlatformPanel } from "./SkillPlatformPanel";
 import { ProjectSkillPreviewSidebar } from "./ProjectSkillPreviewSidebar";
 import { SkillPreviewPane } from "./SkillPreviewPane";
+import { normalizeLocalSkillDirectoryPath } from "../../services/skill-store-source";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useToast } from "../ui/Toast";
@@ -262,8 +263,11 @@ export function SkillFullDetailPage({
 
       if (isProjectDetail) {
         try {
-          const repoSkillMd = await window.api.skill.readLocalFileByPath(
+          const localSkillDirectory = normalizeLocalSkillDirectoryPath(
             selectedSkill.local_repo_path || selectedSkill.source_url || "",
+          );
+          const repoSkillMd = await window.api.skill.readLocalFileByPath(
+            localSkillDirectory,
             "SKILL.md",
           );
           if (!cancelled) {

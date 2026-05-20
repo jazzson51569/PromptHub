@@ -30,6 +30,11 @@ export function normalizeLocalSourcePath(input: string): string {
   return trimmed;
 }
 
+export function normalizeLocalSkillDirectoryPath(input: string): string {
+  const normalizedPath = normalizeLocalSourcePath(input).replace(/\\/g, "/");
+  return normalizedPath.replace(/\/SKILL\.md$/i, "");
+}
+
 export function isLikelyLocalSource(input: string): boolean {
   const value = input.trim();
   return (

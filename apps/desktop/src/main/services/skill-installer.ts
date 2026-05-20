@@ -511,6 +511,10 @@ export class SkillInstaller {
       return result;
     }
 
+    if (await fileExists(path.join(scanPath, "SKILL.md"))) {
+      result.push(scanPath);
+    }
+
     const entries = await fs.readdir(scanPath, { withFileTypes: true });
     const dirsToCheck: string[] = [];
 
