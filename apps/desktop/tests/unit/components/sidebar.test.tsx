@@ -89,6 +89,7 @@ describe("Sidebar", () => {
         ],
         promptTagCatalog: ["gamma"],
         tagFilterMode: "multi",
+        disabledPlatformIds: [],
       } as Partial<ReturnType<typeof useSettingsStore.getState>>);
 
     useRulesStore.setState({
@@ -276,6 +277,7 @@ describe("Sidebar", () => {
     const windsurfButton = screen.getByRole("button", { name: /Windsurf/i });
     expect(within(windsurfButton).getByAltText("windsurf icon")).toBeInTheDocument();
   });
+
 
   it("keeps Rules visible but hides project-directory actions in web runtime", async () => {
     (window as Window & { __PROMPTHUB_WEB__?: boolean }).__PROMPTHUB_WEB__ = true;

@@ -74,6 +74,20 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function filterVisibleRuleFiles(files: RuleFileDescriptor[]): RuleFileDescriptor[] {
+  const settings = useSettingsStore.getState();
+  const disabledPlatformIds = settings.disabledPlatformIds ?? [];
+  const disabledSet = new Set(disabledPlatformIds);
+
+  return files.filter((file) => {
+    if (file.id.startsWith("project:")) {
+      return true;
+    }
+
+    return file.exists && !disabledSet.has(file.platformId);
+  });
+}
+
 let latestLoadFilesRequestId = 0;
 let latestSelectRuleRequestId = 0;
 
@@ -99,11 +113,16 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     const requestId = ++latestLoadFilesRequestId;
     set({ isLoading: true, error: null });
     try {
-      const files = options?.force ? await window.api.rules.scan() : await window.api.rules.list();
+      const allFiles = options?.force ? await window.api.rules.scan() : await window.api.rules.list();
+      const files = filterVisibleRuleFiles(allFiles);
       if (requestId !== latestLoadFilesRequestId) {
         return;
       }
-      const selectedRuleId = get().selectedRuleId ?? files[0]?.id ?? null;
+      const currentSelectedRuleId = get().selectedRuleId;
+      const selectedRuleId =
+        currentSelectedRuleId && files.some((file) => file.id === currentSelectedRuleId)
+          ? currentSelectedRuleId
+          : files[0]?.id ?? null;
       set({ files, selectedRuleId, isLoading: false, hasLoadedFiles: true });
 
       if (selectedRuleId) {
@@ -307,7 +326,7 @@ export const useRulesStore = create<RulesState>((set, get) => ({
           path: file.path,
           exists: file.exists,
           active: selectedRuleId === file.id,
-          canRemove: false,
+          canRemove: true,
           projectId: null,
           description: file.description,
           icon: file.platformIcon,

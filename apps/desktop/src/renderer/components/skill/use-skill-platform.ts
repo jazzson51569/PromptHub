@@ -7,6 +7,7 @@ import {
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { getRuntimeCapabilities } from "../../runtime";
+import { filterDetectedPlatforms } from "../../services/platform-visibility";
 
 export type SkillInstallMode = "copy" | "symlink";
 
@@ -70,6 +71,9 @@ export function useSkillPlatform(
   const skillPlatformOrder = useSettingsStore(
     (state) => state.skillPlatformOrder,
   ) ?? [];
+  const disabledPlatformIds = useSettingsStore(
+    (state) => state.disabledPlatformIds,
+  ) ?? [];
   const runtimeCapabilities = getRuntimeCapabilities();
   const [supportedPlatforms, setSupportedPlatforms] = useState<SkillPlatform[]>(
     [],
@@ -126,12 +130,14 @@ export function useSkillPlatform(
   const availablePlatforms = useMemo(
     () =>
       sortSkillPlatformsByPreference(
-        supportedPlatforms.filter((platform) =>
-          detectedPlatforms.includes(platform.id),
+        filterDetectedPlatforms(
+          supportedPlatforms,
+          detectedPlatforms,
+          disabledPlatformIds,
         ),
         skillPlatformOrder,
       ),
-    [detectedPlatforms, skillPlatformOrder, supportedPlatforms],
+    [detectedPlatforms, disabledPlatformIds, skillPlatformOrder, supportedPlatforms],
   );
 
   const uninstalledPlatforms = useMemo(

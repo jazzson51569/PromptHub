@@ -22,6 +22,7 @@ describe("rules store", () => {
       isSaving: false,
       isRewriting: false,
       error: null,
+      hasLoadedFiles: false,
     });
     useSettingsStore.setState({
       aiProvider: "openai",
@@ -33,6 +34,7 @@ describe("rules store", () => {
   });
 
   it("loads descriptors, selects the first rule, and groups files into global/project sections", async () => {
+    useSettingsStore.setState({ disabledPlatformIds: [] });
     installWindowMocks({
       api: {
         rules: {
@@ -101,6 +103,68 @@ describe("rules store", () => {
         id: "project",
         items: [expect.objectContaining({ id: "project:docs-site", type: "project" })],
       }),
+    ]);
+  });
+
+  it("hides disabled global rules even when the target file exists", async () => {
+    useSettingsStore.setState({
+      disabledPlatformIds: ["claude"],
+    });
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "claude-global",
+              platformId: "claude",
+              platformName: "Claude Code",
+              platformIcon: "claude",
+              platformDescription: "Claude rules",
+              name: "CLAUDE.md",
+              description: "Claude global rule file",
+              path: "/Users/test/.claude/CLAUDE.md",
+              exists: false,
+              group: "assistant",
+            },
+          ]),
+        },
+      },
+    });
+
+    await useRulesStore.getState().loadFiles();
+
+    expect(useRulesStore.getState().files).toEqual([]);
+  });
+
+  it("keeps enabled global rules visible when the target file exists", async () => {
+    useSettingsStore.setState({
+      disabledPlatformIds: [],
+    });
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "claude-global",
+              platformId: "claude",
+              platformName: "Claude Code",
+              platformIcon: "claude",
+              platformDescription: "Claude rules",
+              name: "CLAUDE.md",
+              description: "Claude global rule file",
+              path: "/Users/test/.claude/CLAUDE.md",
+              exists: true,
+              group: "assistant",
+            },
+          ]),
+        },
+      },
+    });
+
+    await useRulesStore.getState().loadFiles();
+
+    expect(useRulesStore.getState().files).toEqual([
+      expect.objectContaining({ id: "claude-global" }),
     ]);
   });
 

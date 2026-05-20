@@ -14,6 +14,7 @@ import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { useToast } from "../ui/Toast";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { useSettingsStore } from "../../stores/settings.store";
+import { filterDetectedPlatforms } from "../../services/platform-visibility";
 import {
   syncSkillsToPlatforms,
   type SkillInstallMode,
@@ -36,6 +37,9 @@ export function SkillBatchDeployDialog({
   const [actionMode, setActionMode] = useState<"deploy" | "undeploy">("deploy");
   const skillInstallMethod = useSettingsStore(
     (state) => state.skillInstallMethod,
+  );
+  const disabledPlatformIds = useSettingsStore(
+    (state) => state.disabledPlatformIds,
   );
   const [installMode, setInstallMode] =
     useState<SkillInstallMode>(skillInstallMethod);
@@ -60,10 +64,12 @@ export function SkillBatchDeployDialog({
 
   const availablePlatforms = useMemo(
     () =>
-      supportedPlatforms.filter((platform) =>
-        detectedPlatforms.includes(platform.id),
+      filterDetectedPlatforms(
+        supportedPlatforms,
+        detectedPlatforms,
+        disabledPlatformIds,
       ),
-    [detectedPlatforms, supportedPlatforms],
+    [detectedPlatforms, disabledPlatformIds, supportedPlatforms],
   );
   const totalTargets = skills.length * selectedPlatforms.size;
 

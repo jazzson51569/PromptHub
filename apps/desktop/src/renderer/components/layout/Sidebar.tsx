@@ -1465,7 +1465,7 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
                         {section.items.map((item) => (
                         <div
                           key={item.id}
-                          className={`w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
+                          className={`relative w-full rounded-2xl border px-3 py-3 text-left transition-colors ${
                             item.active
                               ? 'border-primary/40 bg-primary/10'
                               : 'border-border bg-background/60 hover:bg-muted'

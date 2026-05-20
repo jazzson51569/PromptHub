@@ -11,6 +11,7 @@ import {
   getMinimizeOnLaunchSetting,
   readGithubTokenSetting,
 } from '../settings/settings-readers';
+import { invalidateCustomPathsCache } from '../services/skill-installer-utils';
 
 export {
   getMinimizeOnLaunchSetting,
@@ -58,6 +59,17 @@ export function registerSettingsIPC(db: Database.Database): void {
       );
     }
 
+    const legacyDisabledPlatformIds = (settings as Settings & {
+      trackedRulePlatformIds?: string[];
+    }).trackedRulePlatformIds;
+    if (
+      (!Array.isArray(settings.disabledPlatformIds) ||
+        settings.disabledPlatformIds.length === 0) &&
+      Array.isArray(legacyDisabledPlatformIds)
+    ) {
+      settings.disabledPlatformIds = legacyDisabledPlatformIds;
+    }
+
     return settings;
   });
 
@@ -74,6 +86,12 @@ export function registerSettingsIPC(db: Database.Database): void {
     });
 
     transaction();
+    if (
+      Object.prototype.hasOwnProperty.call(newSettings, 'customPlatformRootPaths') ||
+      Object.prototype.hasOwnProperty.call(newSettings, 'customSkillPlatformPaths')
+    ) {
+      invalidateCustomPathsCache();
+    }
     return true;
   });
 }

@@ -15,8 +15,10 @@ function createSettingsState() {
     skillInstallMethod: "symlink",
     setSkillInstallMethod: vi.fn(),
     customPlatformRootPaths: {},
+    disabledPlatformIds: [],
     setCustomPlatformRootPath: vi.fn(),
     resetCustomPlatformRootPath: vi.fn(),
+    setRulePlatformTracked: vi.fn(),
     customSkillPlatformPaths: {},
     setCustomSkillPlatformPath: vi.fn(),
     resetCustomSkillPlatformPath: vi.fn(),
@@ -108,5 +110,25 @@ describe("SkillSettings", () => {
       "codex",
       "opencode",
     ]);
+  });
+
+  it("toggles rule tracking for platforms with global rules", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const list = screen.getByRole("list", { name: "Platform Display Order" });
+    const firstItem = within(list).getAllByRole("listitem")[0]!;
+    const toggle = within(firstItem).getAllByRole("button")[0]!;
+
+    fireEvent.click(toggle);
+
+    expect(settingsState.setRulePlatformTracked).toHaveBeenCalledWith(
+      "claude",
+      false,
+    );
   });
 });

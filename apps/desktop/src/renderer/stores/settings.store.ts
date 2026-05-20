@@ -504,6 +504,7 @@ interface SettingsState {
   skillProjects: SkillProject[];
 
   customPlatformRootPaths: Record<string, string>;
+  disabledPlatformIds: string[];
   customSkillPlatformPaths: Record<string, string>;
   skillPlatformOrder: string[];
 
@@ -622,6 +623,8 @@ interface SettingsState {
   removeSkillProject: (projectId: string) => void;
   setCustomPlatformRootPath: (platformId: string, path: string) => void;
   resetCustomPlatformRootPath: (platformId: string) => void;
+  setDisabledPlatformIds: (platformIds: string[]) => void;
+  setRulePlatformTracked: (platformId: string, tracked: boolean) => void;
   setCustomSkillPlatformPath: (platformId: string, path: string) => void;
   resetCustomSkillPlatformPath: (platformId: string) => void;
   setSkillPlatformOrder: (order: string[]) => void;
@@ -828,6 +831,7 @@ export const useSettingsStore = create<SettingsState>()(
         customSkillScanPaths: [],
         skillProjects: [],
         customPlatformRootPaths: {},
+        disabledPlatformIds: [],
         customSkillPlatformPaths: {},
         skillPlatformOrder: [],
         skillInstallMethod: "symlink" as const,
@@ -1526,12 +1530,41 @@ export const useSettingsStore = create<SettingsState>()(
           }
           setTouched({ customPlatformRootPaths: nextPaths });
           syncSettingsToMain({ customPlatformRootPaths: nextPaths });
+          void import("./rules.store").then(({ useRulesStore }) => {
+            void useRulesStore.getState().loadFiles({ force: true });
+          });
         },
         resetCustomPlatformRootPath: (platformId) => {
           const nextPaths = { ...get().customPlatformRootPaths };
           delete nextPaths[platformId];
           setTouched({ customPlatformRootPaths: nextPaths });
           syncSettingsToMain({ customPlatformRootPaths: nextPaths });
+          void import("./rules.store").then(({ useRulesStore }) => {
+            void useRulesStore.getState().loadFiles({ force: true });
+          });
+        },
+        setDisabledPlatformIds: (platformIds) => {
+          const normalized = Array.from(
+            new Set(
+              platformIds.filter(
+                (platformId): platformId is string =>
+                  typeof platformId === "string" && platformId.trim().length > 0,
+              ),
+            ),
+          );
+          setTouched({ disabledPlatformIds: normalized });
+          syncSettingsToMain({ disabledPlatformIds: normalized });
+        },
+        setRulePlatformTracked: (platformId, tracked) => {
+          const disabledIds = new Set(get().disabledPlatformIds);
+          if (tracked) {
+            disabledIds.delete(platformId);
+          } else {
+            disabledIds.add(platformId);
+          }
+          const normalized = Array.from(disabledIds);
+          setTouched({ disabledPlatformIds: normalized });
+          syncSettingsToMain({ disabledPlatformIds: normalized });
         },
         setCustomSkillPlatformPath: (platformId, pathValue) => {
           get().setCustomPlatformRootPath(platformId, pathValue);
@@ -1675,6 +1708,24 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.customPlatformRootPaths = {};
         }
+        const legacyDisabledPlatformIds = (
+          next as Partial<SettingsState> & { trackedRulePlatformIds?: unknown }
+        ).trackedRulePlatformIds;
+        if (
+          !Array.isArray(next.disabledPlatformIds) ||
+          next.disabledPlatformIds.some(
+            (platformId) => typeof platformId !== "string",
+          )
+        ) {
+          next.disabledPlatformIds = Array.isArray(legacyDisabledPlatformIds)
+            ? legacyDisabledPlatformIds.filter(
+                (platformId): platformId is string => typeof platformId === "string",
+              )
+            : [];
+        }
+        delete (next as Partial<SettingsState>).rulePlatformTrackingInitialized;
+        delete (next as Partial<SettingsState> & { trackedRulePlatformIds?: unknown })
+          .trackedRulePlatformIds;
         if (
           !next.customSkillPlatformPaths ||
           typeof next.customSkillPlatformPaths !== "object" ||
@@ -1688,6 +1739,16 @@ export const useSettingsStore = create<SettingsState>()(
           Object.keys(next.customSkillPlatformPaths).length > 0
         ) {
           next.customPlatformRootPaths = { ...next.customSkillPlatformPaths };
+        }
+        if (
+          version <= 11 &&
+          Array.isArray(next.disabledPlatformIds) &&
+          next.disabledPlatformIds.length > 0
+        ) {
+          // Previous iterations stored this field as a visible allow-list and
+          // briefly persisted broken partial values. Reset to the safe default
+          // so the Settings checkbox becomes the single source of truth.
+          next.disabledPlatformIds = [];
         }
         if (
           !Array.isArray(next.skillPlatformOrder) ||
@@ -1829,6 +1890,7 @@ export const useSettingsStore = create<SettingsState>()(
         });
         syncSettingsToMain({
           customPlatformRootPaths: state?.customPlatformRootPaths || {},
+          disabledPlatformIds: state?.disabledPlatformIds || [],
           customSkillPlatformPaths: state?.customSkillPlatformPaths || {},
           skillPlatformOrder: state?.skillPlatformOrder || [],
           skillProjects: state?.skillProjects || [],

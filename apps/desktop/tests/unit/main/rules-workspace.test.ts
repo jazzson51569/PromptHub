@@ -293,6 +293,36 @@ describe("rules workspace storage", () => {
     );
   });
 
+  it("refreshes stored global target paths when the platform root changes", async () => {
+    const homeDir = path.join(tempDir, "home");
+    fs.mkdirSync(path.join(homeDir, ".claude"), { recursive: true });
+    fs.mkdirSync(path.join(homeDir, ".claude-custom"), { recursive: true });
+    fs.writeFileSync(path.join(homeDir, ".claude", "CLAUDE.md"), "# Original", "utf8");
+
+    const service = createRulesWorkspaceService({
+      getRulesDir,
+      createRuleDb: () => new RuleDB(initDatabase()),
+      getPlatformGlobalRulePath: (platform) => {
+        if (platform.id === "claude") {
+          return path.join(homeDir, ".claude-custom", "CLAUDE.md");
+        }
+        return path.join(homeDir, platform.id, "AGENTS.md");
+      },
+      getPlatformRootDir: (platform) => {
+        if (platform.id === "claude") {
+          return path.join(homeDir, ".claude-custom");
+        }
+        return path.join(homeDir, platform.id);
+      },
+    });
+
+    await listRuleDescriptors();
+    const refreshed = await service.listRuleDescriptors();
+    const claude = refreshed.find((descriptor) => descriptor.id === "claude-global");
+
+    expect(claude?.path).toContain(".claude-custom/CLAUDE.md");
+  });
+
   it("skips missing version files and repairs the index instead of crashing", async () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });

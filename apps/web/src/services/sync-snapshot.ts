@@ -189,6 +189,7 @@ const settingsSchema = z.object({
   autoSave: z.boolean(),
   defaultFolderId: z.string().optional(),
   customPlatformRootPaths: z.record(z.string()).optional(),
+  disabledPlatformIds: z.array(z.string()).optional(),
   customSkillPlatformPaths: z.record(z.string()).optional(),
   sync: z.object({
     enabled: z.boolean(),
@@ -295,6 +296,15 @@ function normalizeDesktopSettingsSnapshot(settings: unknown): Settings | undefin
             ),
           )
         : undefined,
+    disabledPlatformIds: Array.isArray(state.disabledPlatformIds)
+      ? state.disabledPlatformIds.filter(
+          (value): value is string => typeof value === 'string',
+        )
+      : Array.isArray((state as { trackedRulePlatformIds?: unknown }).trackedRulePlatformIds)
+        ? (state as { trackedRulePlatformIds: unknown[] }).trackedRulePlatformIds.filter(
+            (value): value is string => typeof value === 'string',
+          )
+      : undefined,
     customSkillPlatformPaths:
       isRecord(state.customSkillPlatformPaths)
         ? Object.fromEntries(

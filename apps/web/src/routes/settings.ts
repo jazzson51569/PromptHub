@@ -15,6 +15,7 @@ const updateSettingsSchema = z.object({
   autoSave: z.boolean().optional(),
   defaultFolderId: z.string().trim().min(1).nullable().optional(),
   customPlatformRootPaths: z.record(z.string()).optional(),
+  disabledPlatformIds: z.array(z.string()).optional(),
   customSkillPlatformPaths: z.record(z.string()).optional(),
   sync: z
     .object({

@@ -21,7 +21,7 @@ import {
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { PlatformIcon } from "../ui/PlatformIcon";
-import { SettingSection } from "./shared";
+import { SettingSection, ToggleSwitch } from "./shared";
 import { useToast } from "../ui/Toast";
 import { getSafetyScanAIConfig } from "../skill/detail-utils";
 import { sortSkillPlatformsByPreference } from "../skill/use-skill-platform";
@@ -290,7 +290,7 @@ export function SkillSettings() {
             <p className="text-xs text-muted-foreground">
               {t(
                 "settings.platformDisplayOrderDesc",
-                "Control the platform order shown in Skill detail and batch deployment panels.",
+                "Control which agent platforms are enabled and how they are ordered across Skills and Rules.",
               )}
             </p>
             <button
@@ -328,8 +328,15 @@ export function SkillSettings() {
                   <GripVerticalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <PlatformIcon platformId={platform.id} size={20} />
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground">
-                      {platform.name}
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-medium text-foreground">
+                        {platform.name}
+                      </div>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {settings.disabledPlatformIds.includes(platform.id)
+                          ? t("settings.platformDisabled", "Disabled")
+                          : t("settings.platformEnabled", "Enabled")}
+                      </span>
                     </div>
                     <div className="text-[11px] text-muted-foreground">
                       {settings.customPlatformRootPaths[platform.id] ||
@@ -338,6 +345,12 @@ export function SkillSettings() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
+                  <ToggleSwitch
+                    checked={!settings.disabledPlatformIds.includes(platform.id)}
+                    onChange={(checked) =>
+                      settings.setRulePlatformTracked(platform.id, checked)
+                    }
+                  />
                   <button
                     onClick={() => movePlatformOrder(platform.id, "up")}
                     disabled={index === 0}

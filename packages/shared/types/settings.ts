@@ -15,6 +15,7 @@ export interface Settings {
   backgroundImageOpacity?: number;
   backgroundImageBlur?: number;
   customPlatformRootPaths?: Record<string, string>;
+  disabledPlatformIds?: string[];
   customSkillPlatformPaths?: Record<string, string>;
   skillPlatformOrder?: string[];
   skillProjects?: SkillProject[];
@@ -75,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
   backgroundImageOpacity: 0.22,
   backgroundImageBlur: 14,
   customPlatformRootPaths: {},
+  disabledPlatformIds: [],
   customSkillPlatformPaths: {},
   skillPlatformOrder: [],
   skillProjects: [],

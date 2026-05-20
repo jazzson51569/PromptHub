@@ -16,6 +16,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useSkillStore } from "../../stores/skill.store";
 import { PlatformIcon } from "../ui/PlatformIcon";
+import { filterDetectedPlatforms } from "../../services/platform-visibility";
 import type { Skill, SkillSafetyLevel } from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import { getRuntimeCapabilities } from "../../runtime";
@@ -134,6 +135,9 @@ export function SkillListView({
   const filterType = useSkillStore((state) => state.filterType);
   const storeView = useSkillStore((state) => state.storeView);
   const runtimeCapabilities = getRuntimeCapabilities();
+  const disabledPlatformIds = useSettingsStore(
+    (state) => state.disabledPlatformIds,
+  );
 
   // Platform status cache
   const [platformStatuses, setPlatformStatuses] = useState<
@@ -225,8 +229,12 @@ export function SkillListView({
   }, [runtimeCapabilities.skillPlatformIntegration, skills]);
 
   const availablePlatforms = useMemo(() => {
-    return supportedPlatforms.filter((p) => detectedPlatforms.includes(p.id));
-  }, [supportedPlatforms, detectedPlatforms]);
+    return filterDetectedPlatforms(
+      supportedPlatforms,
+      detectedPlatforms,
+      disabledPlatformIds,
+    );
+  }, [supportedPlatforms, detectedPlatforms, disabledPlatformIds]);
 
   // Get install count for a skill
   const getInstallCount = (skillId: string) => {

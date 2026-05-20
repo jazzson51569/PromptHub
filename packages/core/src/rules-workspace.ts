@@ -544,7 +544,17 @@ export function createRulesWorkspaceService(
     const fallbackMeta = buildGlobalMeta(ruleId);
     const metaPath = getRuleMetaPath(fallbackMeta.managedPath);
     const existingMeta = await readStoredMeta(metaPath);
-    const meta = existingMeta ?? fallbackMeta;
+    const meta = existingMeta
+      ? {
+          ...existingMeta,
+          targetPath: fallbackMeta.targetPath,
+          platformName: fallbackMeta.platformName,
+          platformIcon: fallbackMeta.platformIcon,
+          platformDescription: fallbackMeta.platformDescription,
+          canonicalFileName: fallbackMeta.canonicalFileName,
+          description: fallbackMeta.description,
+        }
+      : fallbackMeta;
 
     if (!(await fileExists(meta.managedPath))) {
       const targetExists = await fileExists(meta.targetPath);

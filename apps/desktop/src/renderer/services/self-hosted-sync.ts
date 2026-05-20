@@ -249,6 +249,15 @@ function toWebSettings(backup: DatabaseBackup): Settings {
             typeof state.customSkillPlatformPaths === "object"
           ? state.customSkillPlatformPaths
           : {},
+    disabledPlatformIds: Array.isArray(state.disabledPlatformIds)
+      ? state.disabledPlatformIds.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : Array.isArray((state as { trackedRulePlatformIds?: unknown }).trackedRulePlatformIds)
+        ? (state as { trackedRulePlatformIds: unknown[] }).trackedRulePlatformIds.filter(
+            (value): value is string => typeof value === "string",
+          )
+      : [],
     customSkillPlatformPaths:
       state.customSkillPlatformPaths &&
       typeof state.customSkillPlatformPaths === "object"
@@ -342,6 +351,7 @@ function buildDesktopSettingsSnapshot(
       language: webSettings.language,
       autoSave: webSettings.autoSave,
       customPlatformRootPaths: webSettings.customPlatformRootPaths || {},
+      disabledPlatformIds: webSettings.disabledPlatformIds || [],
       customSkillPlatformPaths: webSettings.customSkillPlatformPaths || {},
       settingsUpdatedAt: settingsUpdatedAt || new Date().toISOString(),
     },
