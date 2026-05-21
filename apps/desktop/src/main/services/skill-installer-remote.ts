@@ -290,6 +290,8 @@ export interface FetchRemoteTextOptions {
   githubToken?: string | null;
 }
 
+export interface FetchRemoteBytesOptions extends FetchRemoteTextOptions {}
+
 export async function fetchRemoteText(
   targetUrl: string,
   redirectCount = 0,
@@ -422,6 +424,149 @@ export async function fetchRemoteText(
         response.on("end", () => {
           clearTimeout(transferTimer);
           resolve(Buffer.concat(chunks).toString("utf-8"));
+        });
+        response.on("error", (error) => {
+          clearTimeout(transferTimer);
+          reject(error);
+        });
+      },
+    );
+
+    request.on("timeout", () => {
+      request.destroy(new Error("Remote content request timed out"));
+    });
+    request.on("error", (error) => reject(error));
+    request.end();
+  });
+}
+
+export async function fetchRemoteBytes(
+  targetUrl: string,
+  redirectCount = 0,
+  options: FetchRemoteBytesOptions = {},
+): Promise<Uint8Array> {
+  if (redirectCount > REMOTE_FETCH_MAX_REDIRECTS) {
+    throw new Error("Too many redirects while fetching remote content");
+  }
+
+  const parsedUrl = new URL(targetUrl);
+  if (parsedUrl.protocol !== "https:") {
+    throw new Error("Only HTTPS URLs are allowed");
+  }
+
+  const resolvedAddress = await resolvePublicAddress(parsedUrl.hostname);
+  const requestModule = getRequestModule(parsedUrl.protocol);
+
+  const baseHeaders: Record<string, string> = {
+    Host: parsedUrl.host,
+    "User-Agent": "PromptHub/remote-skill-fetch",
+    Accept: "application/octet-stream, application/json;q=0.9, text/plain;q=0.8, */*;q=0.1",
+  };
+
+  if (options.githubToken && shouldAttachGithubAuth(parsedUrl.hostname)) {
+    baseHeaders.Authorization = `Bearer ${options.githubToken}`;
+    baseHeaders["X-GitHub-Api-Version"] = "2022-11-28";
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = requestModule.request(
+      {
+        protocol: parsedUrl.protocol,
+        hostname: resolvedAddress.address,
+        family: resolvedAddress.family,
+        servername: parsedUrl.hostname,
+        port: parsedUrl.port
+          ? Number(parsedUrl.port)
+          : parsedUrl.protocol === "https:"
+            ? 443
+            : 80,
+        path: toRequestPath(parsedUrl),
+        method: "GET",
+        headers: baseHeaders,
+        timeout: REMOTE_FETCH_TIMEOUT_MS,
+      },
+      (response) => {
+        const statusCode = response.statusCode ?? 0;
+        const location = response.headers.location;
+
+        if (
+          statusCode >= 300 &&
+          statusCode < 400 &&
+          typeof location === "string"
+        ) {
+          response.resume();
+          const nextUrl = new URL(location, parsedUrl).toString();
+          let nextGithubToken: string | null | undefined = options.githubToken;
+          try {
+            const nextHostname = new URL(nextUrl).hostname;
+            if (!shouldAttachGithubAuth(nextHostname)) {
+              nextGithubToken = undefined;
+            }
+          } catch {
+            nextGithubToken = undefined;
+          }
+          void fetchRemoteBytes(nextUrl, redirectCount + 1, {
+            ...options,
+            githubToken: nextGithubToken,
+          })
+            .then(resolve)
+            .catch(reject);
+          return;
+        }
+
+        if (statusCode !== 200) {
+          const rateLimitRemaining = getSingleHeaderValue(
+            response.headers["x-ratelimit-remaining"],
+          );
+          if (
+            parsedUrl.hostname === "api.github.com" &&
+            (statusCode === 403 || statusCode === 429) &&
+            rateLimitRemaining === "0"
+          ) {
+            response.resume();
+            reject(new Error("GitHub API rate limit reached"));
+            return;
+          }
+          response.resume();
+          reject(new Error(`HTTP ${statusCode} fetching remote content`));
+          return;
+        }
+
+        const contentLengthHeader = response.headers["content-length"];
+        const contentLength = Array.isArray(contentLengthHeader)
+          ? Number.parseInt(contentLengthHeader[0], 10)
+          : Number.parseInt(contentLengthHeader ?? "", 10);
+        if (
+          Number.isFinite(contentLength) &&
+          contentLength > REMOTE_FETCH_MAX_BYTES
+        ) {
+          response.resume();
+          reject(new Error("Remote content exceeds size limit"));
+          return;
+        }
+
+        let receivedBytes = 0;
+        const chunks: Buffer[] = [];
+
+        const transferTimer = setTimeout(() => {
+          response.destroy(
+            new Error(
+              "Remote content transfer timed out (slowloris protection)",
+            ),
+          );
+        }, REMOTE_FETCH_TRANSFER_TIMEOUT_MS);
+
+        response.on("data", (chunk: Buffer) => {
+          receivedBytes += chunk.length;
+          if (receivedBytes > REMOTE_FETCH_MAX_BYTES) {
+            response.destroy(new Error("Remote content exceeds size limit"));
+            return;
+          }
+          chunks.push(chunk);
+        });
+        response.on("end", () => {
+          clearTimeout(transferTimer);
+          resolve(new Uint8Array(Buffer.concat(chunks)));
         });
         response.on("error", (error) => {
           clearTimeout(transferTimer);

@@ -61,7 +61,9 @@ describe("skill store", () => {
           getAll: vi.fn(),
           update: vi.fn(),
           writeLocalFile: vi.fn(),
+          writeLocalFileBufferByPath: vi.fn(),
           getRepoPath: vi.fn(),
+          fetchRemoteContentBytes: vi.fn(),
           saveSafetyReport: vi.fn().mockResolvedValue(undefined),
         },
       },
@@ -456,6 +458,73 @@ description: Use this skill for PDF tasks.
         installed_content_hash: installed?.installed_content_hash,
         installed_version: "1.0.0",
       }),
+    );
+  });
+
+  it("syncs binary GitHub repo assets into the managed local repo", async () => {
+    const create = vi.fn().mockResolvedValue(
+      createSkillFixture({
+        id: "skill-binary",
+        name: "binary-skill",
+        registry_slug: "binary-skill",
+      }),
+    );
+    const getAll = vi.fn().mockResolvedValue([]);
+    const fetchRemoteContent = vi.fn(async (url: string) => {
+      if (url.includes("/git/trees/")) {
+        return JSON.stringify({
+          tree: [
+            { path: "skills/binary-skill/SKILL.md", type: "blob" },
+            { path: "skills/binary-skill/assets/icon.png", type: "blob" },
+          ],
+        });
+      }
+
+      return "# Binary Skill\n\nHello\n";
+    });
+    const fetchRemoteContentBytes = vi
+      .fn()
+      .mockResolvedValue(Uint8Array.from([0x89, 0x50, 0x4e, 0x47]));
+    const writeLocalFile = vi.fn().mockResolvedValue(undefined);
+    const writeLocalFileBufferByPath = vi.fn().mockResolvedValue(undefined);
+    const getRepoPath = vi.fn().mockResolvedValue("/tmp/managed/binary-skill");
+
+    (window as any).api.skill.create = create;
+    (window as any).api.skill.getAll = getAll;
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.fetchRemoteContentBytes = fetchRemoteContentBytes;
+    (window as any).api.skill.writeLocalFile = writeLocalFile;
+    (window as any).api.skill.writeLocalFileBufferByPath =
+      writeLocalFileBufferByPath;
+    (window as any).api.skill.getRepoPath = getRepoPath;
+
+    await useSkillStore.getState().installRegistrySkill({
+      slug: "binary-skill",
+      name: "Binary Skill",
+      description: "Has image assets",
+      category: "general",
+      author: "PromptHub",
+      source_url:
+        "https://github.com/example/skills/tree/main/skills/binary-skill",
+      content_url:
+        "https://raw.githubusercontent.com/example/skills/main/skills/binary-skill/SKILL.md",
+      tags: ["assets"],
+      version: "1.0.0",
+      content: "# Binary Skill\n\nCached\n",
+    });
+
+    expect(writeLocalFile).toHaveBeenCalledWith(
+      "skill-binary",
+      "SKILL.md",
+      "# Binary Skill\n\nHello\n",
+    );
+    expect(fetchRemoteContentBytes).toHaveBeenCalledWith(
+      "https://raw.githubusercontent.com/example/skills/main/skills/binary-skill/assets/icon.png",
+    );
+    expect(writeLocalFileBufferByPath).toHaveBeenCalledWith(
+      "/tmp/managed/binary-skill",
+      "assets/icon.png",
+      Uint8Array.from([0x89, 0x50, 0x4e, 0x47]),
     );
   });
 

@@ -73,6 +73,22 @@ export async function ensureLocalRepoPath(
   return savedRepoPath;
 }
 
+export async function ensureLocalRepoPathByName(
+  db: SkillDB,
+  skillName: string,
+): Promise<string | null> {
+  if (typeof skillName !== "string" || skillName.trim() === "") {
+    return null;
+  }
+
+  const skill = db.getByName(skillName);
+  if (!skill) {
+    return null;
+  }
+
+  return ensureLocalRepoPath(db, skill.id);
+}
+
 export async function readCurrentFilesSnapshot(
   db: SkillDB,
   skillId: string,

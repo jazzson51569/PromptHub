@@ -49,6 +49,7 @@ import {
   validateSkillName,
 } from "./skill-installer-internal";
 import {
+  fetchRemoteBytes,
   fetchRemoteText,
   isBlockedHostname,
   isPrivateAddress,
@@ -79,6 +80,7 @@ import {
   saveContentToLocalRepo,
   saveToLocalRepo,
   writeLocalRepoFile,
+  writeLocalRepoFileBufferByPath,
   writeLocalRepoFileByPath,
 } from "./skill-installer-repo";
 import {
@@ -116,6 +118,7 @@ export class SkillInstaller {
 
   // ---- Remote / SSRF (re-exported for tests & callers) ----
   static fetchRemoteText = fetchRemoteText;
+  static fetchRemoteBytes = fetchRemoteBytes;
 
   // ---- Repo CRUD (delegated) ----
   static isManagedRepoPath = isManagedRepoPath;
@@ -129,6 +132,7 @@ export class SkillInstaller {
   static readLocalRepoFile = readLocalRepoFile;
   static readLocalRepoFileByPath = readLocalRepoFileByPath;
   static writeLocalRepoFile = writeLocalRepoFile;
+  static writeLocalRepoFileBufferByPath = writeLocalRepoFileBufferByPath;
   static writeLocalRepoFileByPath = writeLocalRepoFileByPath;
   static deleteLocalRepoFile = deleteLocalRepoFile;
   static deleteLocalRepoFileByPath = deleteLocalRepoFileByPath;
@@ -286,15 +290,16 @@ export class SkillInstaller {
     try {
       console.log(`Cloning ${url} to ${installDir}`);
       await gitClone(url, installDir);
+      const skillDir = await this.resolveSingleSkillDirFromRepo(installDir);
 
       // Parse metadata
-      const manifest = await this.readManifest(installDir);
+      const manifest = await this.readManifest(skillDir);
 
       // Load instructions from SKILL.md if not in manifest
       if (!manifest.instructions) {
         try {
           manifest.instructions = await fs.readFile(
-            path.join(installDir, "SKILL.md"),
+            path.join(skillDir, "SKILL.md"),
             "utf-8",
           );
         } catch (e) {
@@ -331,7 +336,7 @@ export class SkillInstaller {
         instructions: manifest.instructions || "",
         protocol_type: "skill",
         source_url: url,
-        local_repo_path: installDir,
+        local_repo_path: skillDir,
         is_favorite: false,
         tags: [],
         original_tags: manifest.tags || ["github"],
@@ -843,6 +848,27 @@ export class SkillInstaller {
       return await fetchRemoteText(url, 0, { githubToken });
     } catch (error) {
       console.error("Failed to fetch remote content from remote URL:", error);
+      throw error;
+    }
+  }
+
+  static async fetchRemoteContentBytes(url: string): Promise<Uint8Array> {
+    try {
+      let githubToken: string | null = null;
+      try {
+        const db = initDatabase();
+        if (db && typeof db.prepare === "function") {
+          githubToken = readGithubTokenSetting(db);
+        }
+      } catch (tokenError) {
+        console.warn(
+          "Unable to load githubToken setting, continuing unauthenticated:",
+          tokenError,
+        );
+      }
+      return await fetchRemoteBytes(url, 0, { githubToken });
+    } catch (error) {
+      console.error("Failed to fetch remote bytes from remote URL:", error);
       throw error;
     }
   }

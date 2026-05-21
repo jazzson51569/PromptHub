@@ -111,6 +111,7 @@ export const IPC_CHANNELS = {
   SKILL_GET_MD_INSTALL_STATUS_BATCH: "skill:getMdInstallStatusBatch",
   SKILL_INSTALL_MD_SYMLINK: "skill:installMdSymlink",
   SKILL_FETCH_REMOTE_CONTENT: "skill:fetchRemoteContent",
+  SKILL_FETCH_REMOTE_CONTENT_BYTES: "skill:fetchRemoteContentBytes",
 
   // Skill Local Repo Storage
   SKILL_LIST_LOCAL_FILES: "skill:listLocalFiles",
@@ -124,6 +125,7 @@ export const IPC_CHANNELS = {
   SKILL_READ_LOCAL_FILE_BY_PATH: "skill:readLocalFileByPath",
   SKILL_RENAME_LOCAL_PATH_BY_PATH: "skill:renameLocalPathByPath",
   SKILL_WRITE_LOCAL_FILE_BY_PATH: "skill:writeLocalFileByPath",
+  SKILL_WRITE_LOCAL_FILE_BUFFER_BY_PATH: "skill:writeLocalFileBufferByPath",
   SKILL_DELETE_LOCAL_FILE_BY_PATH: "skill:deleteLocalFileByPath",
   SKILL_CREATE_LOCAL_DIR_BY_PATH: "skill:createLocalDirByPath",
   SKILL_SAVE_TO_REPO: "skill:saveToRepo",

@@ -2439,6 +2439,7 @@ async function handleSkillCommand(
     }
     const { skill } = resolveSkillIdentifier(skillDb, identifier);
     await context.skills.installSkillMd(
+      skillDb,
       skill.name,
       skill.instructions || skill.content || "",
       platformId.trim(),

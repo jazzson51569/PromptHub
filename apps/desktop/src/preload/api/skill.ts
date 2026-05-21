@@ -98,6 +98,8 @@ export const skillApi = {
     ),
   fetchRemoteContent: (url: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT, url),
+  fetchRemoteContentBytes: (url: string) =>
+    ipcRenderer.invoke(IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT_BYTES, url),
   saveToRepo: (skillName: string, sourceDir: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.SKILL_SAVE_TO_REPO, skillName, sourceDir),
   listLocalFiles: (skillId: string): Promise<SkillLocalFileTreeEntry[]> =>
@@ -180,6 +182,17 @@ export const skillApi = {
   ) =>
     ipcRenderer.invoke(
       IPC_CHANNELS.SKILL_WRITE_LOCAL_FILE_BY_PATH,
+      localPath,
+      relativePath,
+      content,
+    ),
+  writeLocalFileBufferByPath: (
+    localPath: string,
+    relativePath: string,
+    content: Uint8Array,
+  ) =>
+    ipcRenderer.invoke(
+      IPC_CHANNELS.SKILL_WRITE_LOCAL_FILE_BUFFER_BY_PATH,
       localPath,
       relativePath,
       content,

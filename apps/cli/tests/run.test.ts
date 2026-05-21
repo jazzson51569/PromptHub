@@ -837,6 +837,77 @@ describe("standalone cli wiring", () => {
     expect(JSON.parse(stdout.join("\n")).name).toBe("github-skill");
   });
 
+  it("installs only the nested directory that contains SKILL.md from a github repo", async () => {
+    const root = makeTempRoot(tempDirs);
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const gitCloneImpl = vi.fn(async (_url: string, destinationDir: string) => {
+      const skillDir = path.join(destinationDir, "skills", "nested-skill");
+      fs.mkdirSync(path.join(skillDir, "assets"), { recursive: true });
+      fs.writeFileSync(
+        path.join(skillDir, "SKILL.md"),
+        [
+          "---",
+          "name: nested-skill",
+          "description: Nested github install",
+          "version: 1.0.0",
+          "author: Github",
+          "---",
+          "",
+          "# Nested Github Skill",
+        ].join("\n"),
+        "utf8",
+      );
+      fs.writeFileSync(path.join(skillDir, "assets", "helper.txt"), "nested", "utf8");
+      fs.writeFileSync(path.join(destinationDir, "README.md"), "repo root readme", "utf8");
+    });
+
+    const exitCode = await runCli(
+      [...withDataDir(root), "skill", "install", "https://github.com/acme/nested-skill-repo"],
+      {
+        stdout: (message: string) => stdout.push(message),
+        stderr: (message: string) => stderr.push(message),
+      },
+      undefined,
+      undefined,
+      createCliSkillService({ gitCloneImpl }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toEqual([]);
+    expect(JSON.parse(stdout.join("\n")).local_repo_path).toContain(
+      path.join("skills", "nested-skill"),
+    );
+  });
+
+  it("rejects github repo install when multiple skill directories are found", async () => {
+    const root = makeTempRoot(tempDirs);
+    const stdout: string[] = [];
+    const stderr: string[] = [];
+    const gitCloneImpl = vi.fn(async (_url: string, destinationDir: string) => {
+      const skillA = path.join(destinationDir, "skills", "a-skill");
+      const skillB = path.join(destinationDir, "skills", "b-skill");
+      fs.mkdirSync(skillA, { recursive: true });
+      fs.mkdirSync(skillB, { recursive: true });
+      fs.writeFileSync(path.join(skillA, "SKILL.md"), "---\nname: a-skill\n---\n", "utf8");
+      fs.writeFileSync(path.join(skillB, "SKILL.md"), "---\nname: b-skill\n---\n", "utf8");
+    });
+
+    const exitCode = await runCli(
+      [...withDataDir(root), "skill", "install", "https://github.com/acme/multi-skill-repo"],
+      {
+        stdout: (message: string) => stdout.push(message),
+        stderr: (message: string) => stderr.push(message),
+      },
+      undefined,
+      undefined,
+      createCliSkillService({ gitCloneImpl }),
+    );
+
+    expect(exitCode).not.toBe(0);
+    expect(stderr.join("\n")).toContain("Multiple skill directories found in repository");
+  });
+
   it("deletes a skill while keeping platform installs when requested", async () => {
     const root = makeTempRoot(tempDirs);
     const skillDir = path.join(root, "keep-platform-skill");
@@ -1303,6 +1374,7 @@ describe("standalone cli wiring", () => {
       platformId: "claude",
     });
     expect(installSkillMd).toHaveBeenCalledWith(
+      expect.anything(),
       "platform-skill",
       expect.stringContaining("# Platform Skill"),
       "claude",
@@ -1326,6 +1398,65 @@ describe("standalone cli wiring", () => {
       platformId: "claude",
     });
     expect(uninstallSkillMd).toHaveBeenCalledWith("platform-skill", "claude");
+  });
+
+  it("installs platform skills as full directories instead of only SKILL.md", async () => {
+    const root = makeTempRoot(tempDirs);
+    const originalHome = process.env.HOME;
+    const skillDir = path.join(root, "directory-platform-skill");
+    fs.mkdirSync(path.join(skillDir, "assets"), { recursive: true });
+    fs.writeFileSync(
+      path.join(skillDir, "SKILL.md"),
+      [
+        "---",
+        "name: directory-platform-skill",
+        "description: Directory platform skill",
+        "version: 1.0.0",
+        "author: CLI Test",
+        "---",
+        "",
+        "# Directory Platform Skill",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(skillDir, "assets", "helper.txt"), "helper", "utf8");
+
+    try {
+      process.env.HOME = path.join(root, "home");
+      fs.mkdirSync(process.env.HOME, { recursive: true });
+
+      const installRes = await execCli([
+        ...withDataDir(root),
+        "skill",
+        "install",
+        skillDir,
+      ]);
+      expect(installRes.exitCode).toBe(0);
+
+      const installMdRes = await execCli([
+        ...withDataDir(root),
+        "skill",
+        "install-md",
+        "directory-platform-skill",
+        "--platform",
+        "claude",
+      ]);
+      expect(installMdRes.exitCode).toBe(0);
+
+      const platformDir = path.join(
+        process.env.HOME,
+        ".claude",
+        "skills",
+        "directory-platform-skill",
+      );
+      expect(fs.existsSync(path.join(platformDir, "SKILL.md"))).toBe(true);
+      expect(fs.existsSync(path.join(platformDir, "assets", "helper.txt"))).toBe(true);
+      expect(
+        fs.readFileSync(path.join(platformDir, "assets", "helper.txt"), "utf8"),
+      ).toBe("helper");
+    } finally {
+      process.env.HOME = originalHome;
+    }
   });
 
   it("supports the full folder lifecycle", async () => {

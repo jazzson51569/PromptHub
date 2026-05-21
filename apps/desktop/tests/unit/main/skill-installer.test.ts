@@ -1773,6 +1773,7 @@ describe("SkillInstaller.installFromGithub", () => {
       ),
     ).rejects.toThrow(/already exists in the library/);
   });
+
 });
 
 // ---------- M6: scanLocalPreview with db param marks DB-existing names ----------

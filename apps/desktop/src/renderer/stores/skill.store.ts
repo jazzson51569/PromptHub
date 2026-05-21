@@ -381,56 +381,10 @@ function parseGitHubSkillLocation(
   return null;
 }
 
-function shouldSyncRemoteRepoFile(relativePath: string): boolean {
-  const ext = relativePath.includes(".")
-    ? relativePath.slice(relativePath.lastIndexOf(".")).toLowerCase()
-    : "";
-  return (
-    ext === "" ||
-    [
-      ".md",
-      ".mdx",
-      ".txt",
-      ".json",
-      ".yaml",
-      ".yml",
-      ".toml",
-      ".ini",
-      ".cfg",
-      ".js",
-      ".mjs",
-      ".cjs",
-      ".ts",
-      ".tsx",
-      ".jsx",
-      ".py",
-      ".rb",
-      ".go",
-      ".rs",
-      ".java",
-      ".kt",
-      ".swift",
-      ".sh",
-      ".bash",
-      ".zsh",
-      ".ps1",
-      ".html",
-      ".css",
-      ".svg",
-      ".xml",
-      ".sql",
-      ".r",
-      ".lua",
-      ".php",
-      ".c",
-      ".cpp",
-      ".h",
-      ".hpp",
-      ".cs",
-      ".lock",
-      ".gitignore",
-    ].includes(ext)
-  );
+function shouldSkipRemoteRepoFile(relativePath: string): boolean {
+  return relativePath
+    .split("/")
+    .some((segment) => segment === ".git" || segment === ".prompthub");
 }
 
 async function syncRemoteGitHubSkillRepo(
@@ -464,12 +418,26 @@ async function syncRemoteGitHubSkillRepo(
     REMOTE_REPO_SYNC_CONCURRENCY,
     async (file) => {
       const relativePath = file.path.slice(directoryPrefix.length);
-      if (!relativePath || !shouldSyncRemoteRepoFile(relativePath)) {
+      if (!relativePath || shouldSkipRemoteRepoFile(relativePath)) {
         return;
       }
       const rawUrl = `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${location.branch}/${file.path}`;
-      const content = await window.api.skill.fetchRemoteContent(rawUrl);
-      await window.api.skill.writeLocalFile(skillId, relativePath, content);
+      if (relativePath.toLowerCase() === "skill.md") {
+        const content = await window.api.skill.fetchRemoteContent(rawUrl);
+        await window.api.skill.writeLocalFile(skillId, relativePath, content);
+        return;
+      }
+
+      const repoPath = await window.api.skill.getRepoPath(skillId);
+      if (!repoPath) {
+        throw new Error(`Missing local repo path for skill: ${skillId}`);
+      }
+      const content = await window.api.skill.fetchRemoteContentBytes(rawUrl);
+      await window.api.skill.writeLocalFileBufferByPath(
+        repoPath,
+        relativePath,
+        content,
+      );
     },
   );
 }

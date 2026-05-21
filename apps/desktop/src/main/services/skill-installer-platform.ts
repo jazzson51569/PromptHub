@@ -16,7 +16,10 @@ import {
   initSkillsDir,
   validateSkillName,
 } from "./skill-installer-internal";
-import { saveContentToLocalRepo } from "./skill-installer-repo";
+import {
+  isInternalSkillRepoEntry,
+  saveContentToLocalRepo,
+} from "./skill-installer-repo";
 import {
   getPlatformSkillsDir,
   validateMCPConfig,
@@ -207,6 +210,24 @@ export async function getPlatformStatus(
 
 // ==================== SKILL.md multi-platform ====================
 
+async function copySkillRepoToPlatform(
+  sourceDir: string,
+  targetDir: string,
+): Promise<void> {
+  await fs.rm(targetDir, { recursive: true, force: true });
+  await fs.cp(sourceDir, targetDir, {
+    recursive: true,
+    filter: async (_src, dest) => {
+      const relativePath = path.relative(targetDir, dest);
+      if (!relativePath || relativePath === "") {
+        return true;
+      }
+
+      return !isInternalSkillRepoEntry(relativePath);
+    },
+  });
+}
+
 /**
  * Get list of supported platforms.
  */
@@ -242,6 +263,7 @@ export async function installSkillMd(
   skillName: string,
   skillMdContent: string,
   platformId: string,
+  canonicalRepoPath?: string,
 ): Promise<void> {
   validateSkillName(skillName);
   const platform = SKILL_PLATFORMS.find((p) => p.id === platformId);
@@ -250,27 +272,21 @@ export async function installSkillMd(
   }
 
   // Ensure the canonical copy exists in local repo
-  await saveContentToLocalRepo(skillName, skillMdContent);
+  const canonicalDir =
+    canonicalRepoPath ?? (await saveContentToLocalRepo(skillName, skillMdContent));
 
   const skillsDir = getPlatformSkillsDir(platform);
   const skillDir = path.join(skillsDir, skillName);
 
   try {
-    // Create skill directory
-    await fs.mkdir(skillDir, { recursive: true });
-
-    // Write SKILL.md file
-    await fs.writeFile(
-      path.join(skillDir, "SKILL.md"),
-      skillMdContent,
-      "utf-8",
-    );
+    await fs.mkdir(skillsDir, { recursive: true });
+    await copySkillRepoToPlatform(canonicalDir, skillDir);
 
     console.log(
-      `Successfully installed SKILL.md for "${skillName}" to ${platform.name} at ${skillDir}`,
+      `Successfully installed skill directory for "${skillName}" to ${platform.name} at ${skillDir}`,
     );
   } catch (error) {
-    console.error(`Failed to install SKILL.md to ${platform.name}:`, error);
+    console.error(`Failed to install skill directory to ${platform.name}:`, error);
     throw error;
   }
 }
@@ -327,15 +343,14 @@ export async function getSkillMdInstallStatus(
 /**
  * Install SKILL.md to a platform via symlink (soft install)
  *
- * Creates a platform skill directory that symlinks only the canonical
- * `SKILL.md` file from PromptHub's managed repo. This preserves shared
- * updates without exposing PromptHub-internal sidecar directories such as
- * `.prompthub/` to external platform skill folders.
+ * Creates a platform skill directory as a directory symlink to the managed
+ * repo. This makes the entire skill folder the installation unit.
  */
 export async function installSkillMdSymlink(
   skillName: string,
   skillMdContent: string,
   platformId: string,
+  canonicalRepoPath?: string,
 ): Promise<void> {
   const mainSkillsDir = getSkillsDirAccessor();
   validateSkillName(skillName);
@@ -347,19 +362,15 @@ export async function installSkillMdSymlink(
   await initSkillsDir();
 
   // 1. Write the canonical copy into PromptHub's own skills dir
-  const canonicalDir = path.join(mainSkillsDir, skillName);
-  await fs.mkdir(canonicalDir, { recursive: true });
-  await fs.writeFile(
-    path.join(canonicalDir, "SKILL.md"),
-    skillMdContent,
-    "utf-8",
-  );
-  const canonicalSkillMdPath = path.join(canonicalDir, "SKILL.md");
+  const canonicalDir = canonicalRepoPath ?? path.join(mainSkillsDir, skillName);
+  if (!canonicalRepoPath) {
+    await fs.mkdir(canonicalDir, { recursive: true });
+    await fs.writeFile(path.join(canonicalDir, "SKILL.md"), skillMdContent, "utf-8");
+  }
 
-  // 2. Create a platform skill dir and symlink only SKILL.md into it
+  // 2. Create a platform skill dir as a directory symlink to the managed repo
   const platformSkillsDir = getPlatformSkillsDir(platform);
   const platformSkillDir = path.join(platformSkillsDir, skillName);
-  const platformSkillMdPath = path.join(platformSkillDir, "SKILL.md");
   const fallbackInstall = async (reason: string): Promise<void> => {
     console.warn(
       `Symlink install unsupported for "${skillName}" on ${platform.name}; falling back to copy install. Reason: ${reason}`,
@@ -382,10 +393,9 @@ export async function installSkillMdSymlink(
     }
 
     // Create directory symlink
-    await fs.mkdir(platformSkillDir, { recursive: true });
-    await fs.symlink(canonicalSkillMdPath, platformSkillMdPath, "file");
+    await fs.symlink(canonicalDir, platformSkillDir, "dir");
     console.log(
-      `Symlinked "${skillName}" → ${platform.name}: ${canonicalSkillMdPath} → ${platformSkillMdPath}`,
+      `Symlinked "${skillName}" repo directory → ${platform.name}: ${canonicalDir} → ${platformSkillDir}`,
     );
   } catch (error) {
     const code = getErrorCode(error);

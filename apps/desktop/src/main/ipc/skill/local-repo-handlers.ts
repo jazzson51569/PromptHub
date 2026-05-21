@@ -323,6 +323,32 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
   );
 
   ipcMain.handle(
+    IPC_CHANNELS.SKILL_WRITE_LOCAL_FILE_BUFFER_BY_PATH,
+    async (_, localPath: string, relativePath: string, content: Uint8Array) => {
+      if (typeof localPath !== "string" || localPath.trim() === "") {
+        throw new Error(
+          "skill:writeLocalFileBufferByPath requires a non-empty localPath",
+        );
+      }
+      if (typeof relativePath !== "string" || relativePath.trim() === "") {
+        throw new Error(
+          "skill:writeLocalFileBufferByPath requires a non-empty relativePath",
+        );
+      }
+      if (!(content instanceof Uint8Array)) {
+        throw new Error(
+          "skill:writeLocalFileBufferByPath requires Uint8Array content",
+        );
+      }
+      return SkillInstaller.writeLocalRepoFileBufferByPath(
+        localPath,
+        relativePath,
+        content,
+      );
+    },
+  );
+
+  ipcMain.handle(
     IPC_CHANNELS.SKILL_DELETE_LOCAL_FILE,
     async (_, skillId: string, relativePath: string) => {
       if (typeof skillId !== "string" || skillId.trim() === "") {

@@ -7,6 +7,7 @@ import type {
 import { SkillInstaller } from "../../services/skill-installer";
 import { scanSkillSafety } from "../../services/skill-safety-scan";
 import type { SkillIPCContext } from "./shared";
+import { ensureLocalRepoPathByName } from "./shared";
 
 const SUPPORTED_MCP_PLATFORMS = new Set(["claude", "cursor"]);
 
@@ -124,10 +125,12 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
       if (typeof platformId !== "string" || platformId.trim().length === 0) {
         throw new Error("skill:installMd requires a non-empty platformId");
       }
+      const repoPath = await ensureLocalRepoPathByName(db, skillName);
       return SkillInstaller.installSkillMd(
         skillName,
         skillMdContent,
         platformId,
+        repoPath ?? undefined,
       );
     },
   );
@@ -203,10 +206,12 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
           "skill:installMdSymlink requires a non-empty platformId",
         );
       }
+      const repoPath = await ensureLocalRepoPathByName(db, skillName);
       return SkillInstaller.installSkillMdSymlink(
         skillName,
         skillMdContent,
         platformId,
+        repoPath ?? undefined,
       );
     },
   );
@@ -228,6 +233,31 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
         throw new Error("skill:fetchRemoteContent only allows http/https URLs");
       }
       return await SkillInstaller.fetchRemoteContent(url);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.SKILL_FETCH_REMOTE_CONTENT_BYTES,
+    async (_, url: string) => {
+      if (typeof url !== "string" || url.trim().length === 0) {
+        throw new Error(
+          "skill:fetchRemoteContent:bytes requires a non-empty url",
+        );
+      }
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        throw new Error(
+          "skill:fetchRemoteContent:bytes received an invalid URL",
+        );
+      }
+      if (!["http:", "https:"].includes(parsed.protocol)) {
+        throw new Error(
+          "skill:fetchRemoteContent:bytes only allows http/https URLs",
+        );
+      }
+      return await SkillInstaller.fetchRemoteContentBytes(url);
     },
   );
 }

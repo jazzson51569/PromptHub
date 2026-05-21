@@ -418,6 +418,24 @@ async function saveRepo(skillName: string, sourceDir: string): Promise<string> {
   return destinationDir;
 }
 
+async function copyRepoToPlatform(
+  sourceDir: string,
+  destinationDir: string,
+): Promise<void> {
+  await fs.rm(destinationDir, { recursive: true, force: true });
+  await fs.cp(sourceDir, destinationDir, {
+    recursive: true,
+    filter: async (_sourcePath: string, targetPath: string) => {
+      const relativePath = path.relative(destinationDir, targetPath);
+      if (!relativePath || relativePath === "") {
+        return true;
+      }
+
+      return !isInternalSkillRepoEntry(relativePath);
+    },
+  });
+}
+
 async function saveContent(skillName: string, content: string): Promise<string> {
   const managedSkillsDir = getSkillsDir();
   const destinationDir = path.join(managedSkillsDir, validateSkillName(skillName));
@@ -542,12 +560,13 @@ async function installFromGithub(
   try {
     await fs.mkdir(path.dirname(installDir), { recursive: true });
     await gitCloneImpl(sourceUrl, installDir);
-    const manifest = await readManifest(installDir);
+    const skillDir = await resolveSingleSkillDirFromRepo(installDir);
+    const manifest = await readManifest(skillDir);
 
     if (!manifest.instructions) {
       try {
         manifest.instructions = await fs.readFile(
-          path.join(installDir, "SKILL.md"),
+          path.join(skillDir, "SKILL.md"),
           "utf-8",
         );
       } catch {
@@ -575,7 +594,7 @@ async function installFromGithub(
       instructions: manifest.instructions || "",
       protocol_type: "skill",
       source_url: sourceUrl,
-      local_repo_path: installDir,
+      local_repo_path: skillDir,
       is_favorite: false,
       tags: [],
       original_tags: manifest.tags || ["github"],
@@ -782,6 +801,24 @@ async function collectSkillDirs(scanPath: string): Promise<string[]> {
   return skillDirs;
 }
 
+async function resolveSingleSkillDirFromRepo(repoRoot: string): Promise<string> {
+  if (await fileExists(path.join(repoRoot, "SKILL.md"))) {
+    return repoRoot;
+  }
+
+  const skillDirs = await collectSkillDirs(repoRoot);
+  if (skillDirs.length === 1) {
+    return skillDirs[0];
+  }
+  if (skillDirs.length === 0) {
+    throw new Error(`SKILL.md not found in repository: ${repoRoot}`);
+  }
+
+  throw new Error(
+    `Multiple skill directories found in repository: ${repoRoot}. Install a specific skill directory instead of the repo root.`,
+  );
+}
+
 function markNameConflicts(results: ScannedSkill[], skillDb?: SkillDB): void {
   const counts = new Map<string, number>();
   for (const result of results) {
@@ -821,6 +858,7 @@ export interface CliSkillService {
     options?: { name?: string },
   ): Promise<string>;
   installSkillMd(
+    skillDb: SkillDB,
     skillName: string,
     skillMdContent: string,
     platformId: string,
@@ -932,6 +970,18 @@ export function createCliSkillService(
       skillDb.update(skill.id, { local_repo_path: saved });
     }
     return saved;
+  }
+
+  async function getRepoPathForSkillName(
+    skillDb: SkillDB,
+    skillName: string,
+  ): Promise<string | null> {
+    const skill = skillDb.getByName(skillName);
+    if (!skill) {
+      return null;
+    }
+
+    return getRepoPathForSkill(skillDb, skill.id);
   }
 
   async function resolveRepoPathForSkill(
@@ -1165,6 +1215,7 @@ export function createCliSkillService(
   }
 
   async function installSkillMd(
+    skillDb: SkillDB,
     skillName: string,
     skillMdContent: string,
     platformId: string,
@@ -1173,10 +1224,12 @@ export function createCliSkillService(
     if (!platform) {
       throw new Error(`Unknown platform: ${platformId}`);
     }
-    await saveContent(skillName, skillMdContent);
+    const canonicalRepoPath =
+      (await getRepoPathForSkillName(skillDb, skillName)) ??
+      (await saveContent(skillName, skillMdContent));
     const skillDir = path.join(getPlatformSkillsDir(platform), validateSkillName(skillName));
-    await fs.mkdir(skillDir, { recursive: true });
-    await fs.writeFile(path.join(skillDir, "SKILL.md"), skillMdContent, "utf-8");
+    await fs.mkdir(path.dirname(skillDir), { recursive: true });
+    await copyRepoToPlatform(canonicalRepoPath, skillDir);
   }
 
   async function uninstallSkillMd(skillName: string, platformId: string): Promise<void> {

@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fsMocks = vi.hoisted(() => ({
   mkdir: vi.fn(),
+  cp: vi.fn(),
   writeFile: vi.fn(),
   lstat: vi.fn(),
   rm: vi.fn(),
@@ -27,7 +28,9 @@ const internalMocks = vi.hoisted(() => ({
 }));
 
 const repoMocks = vi.hoisted(() => ({
-  saveContentToLocalRepo: vi.fn().mockResolvedValue(undefined),
+  saveContentToLocalRepo: vi
+    .fn()
+    .mockResolvedValue("/prompthub/skills/demo-skill"),
 }));
 
 const utilsMocks = vi.hoisted(() => ({
@@ -54,16 +57,34 @@ vi.mock("../../../src/main/services/skill-installer-utils", () => ({
   validateMCPConfig: utilsMocks.validateMCPConfig,
 }));
 
-import { installSkillMdSymlink } from "../../../src/main/services/skill-installer-platform";
+import {
+  installSkillMd,
+  installSkillMdSymlink,
+} from "../../../src/main/services/skill-installer-platform";
 
 describe("skill-installer-platform symlink install", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fsMocks.lstat.mockRejectedValue(Object.assign(new Error("missing"), { code: "ENOENT" }));
     fsMocks.mkdir.mockResolvedValue(undefined);
+    fsMocks.cp.mockResolvedValue(undefined);
     fsMocks.writeFile.mockResolvedValue(undefined);
     fsMocks.rm.mockResolvedValue(undefined);
     fsMocks.symlink.mockResolvedValue(undefined);
+  });
+
+  it("copies the managed skill directory into the platform directory", async () => {
+    await installSkillMd("demo-skill", "# skill", "claude");
+
+    expect(repoMocks.saveContentToLocalRepo).toHaveBeenCalledWith(
+      "demo-skill",
+      "# skill",
+    );
+    expect(fsMocks.cp).toHaveBeenCalledWith(
+      expect.anything(),
+      "/platform/skills/demo-skill",
+      expect.objectContaining({ recursive: true, filter: expect.any(Function) }),
+    );
   });
 
   it("falls back to copy install when symlink creation returns EPERM", async () => {
@@ -74,22 +95,18 @@ describe("skill-installer-platform symlink install", () => {
     await installSkillMdSymlink("demo-skill", "# skill", "claude");
 
     expect(fsMocks.symlink).toHaveBeenCalledWith(
-      "/prompthub/skills/demo-skill/SKILL.md",
-      "/platform/skills/demo-skill/SKILL.md",
-      "file",
+      "/prompthub/skills/demo-skill",
+      "/platform/skills/demo-skill",
+      "dir",
     );
-    expect(repoMocks.saveContentToLocalRepo).toHaveBeenCalledWith(
-      "demo-skill",
-      "# skill",
-    );
-    expect(fsMocks.writeFile).toHaveBeenCalledWith(
-      "/platform/skills/demo-skill/SKILL.md",
-      "# skill",
-      "utf-8",
+    expect(fsMocks.cp).toHaveBeenCalledWith(
+      "/prompthub/skills/demo-skill",
+      "/platform/skills/demo-skill",
+      expect.objectContaining({ recursive: true, filter: expect.any(Function) }),
     );
   });
 
-  it("symlinks only the canonical SKILL.md file into the platform directory", async () => {
+  it("symlinks the whole skill directory into the platform directory", async () => {
     await installSkillMdSymlink("demo-skill", "# skill", "claude");
 
     expect(fsMocks.mkdir).toHaveBeenCalledWith("/prompthub/skills/demo-skill", {
@@ -98,15 +115,7 @@ describe("skill-installer-platform symlink install", () => {
     expect(fsMocks.mkdir).toHaveBeenCalledWith("/platform/skills", {
       recursive: true,
     });
-    expect(fsMocks.mkdir).toHaveBeenCalledWith("/platform/skills/demo-skill", {
-      recursive: true,
-    });
     expect(fsMocks.symlink).toHaveBeenCalledWith(
-      "/prompthub/skills/demo-skill/SKILL.md",
-      "/platform/skills/demo-skill/SKILL.md",
-      "file",
-    );
-    expect(fsMocks.symlink).not.toHaveBeenCalledWith(
       "/prompthub/skills/demo-skill",
       "/platform/skills/demo-skill",
       "dir",
@@ -124,10 +133,10 @@ describe("skill-installer-platform symlink install", () => {
 
     await installSkillMdSymlink("demo-skill", "# skill", "claude");
 
-    expect(fsMocks.writeFile).toHaveBeenCalledWith(
-      "/platform/skills/demo-skill/SKILL.md",
-      "# skill",
-      "utf-8",
+    expect(fsMocks.cp).toHaveBeenCalledWith(
+      "/prompthub/skills/demo-skill",
+      "/platform/skills/demo-skill",
+      expect.objectContaining({ recursive: true, filter: expect.any(Function) }),
     );
   });
 

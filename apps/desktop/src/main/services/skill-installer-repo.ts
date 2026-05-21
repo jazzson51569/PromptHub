@@ -478,6 +478,22 @@ export async function writeLocalRepoFileByPath(
   await fs.writeFile(fullPath, content, "utf-8");
 }
 
+export async function writeLocalRepoFileBufferByPath(
+  absoluteBasePath: string,
+  relativePath: string,
+  content: Uint8Array,
+): Promise<void> {
+  await initSkillsDir();
+  const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const { fullPath } = await resolveRepoTargetPath(
+    normalizedBasePath,
+    relativePath,
+    { ensureBaseExists: true, allowOutsideSkillsDir: true },
+  );
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, content);
+}
+
 // ==================== Delete ====================
 
 /**
