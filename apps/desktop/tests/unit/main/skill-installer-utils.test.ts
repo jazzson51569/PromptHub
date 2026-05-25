@@ -86,6 +86,38 @@ describe("skill-installer-utils", () => {
       expect(resolvedPath).toContain(".trae/skills");
     });
 
+    it("resolves the built-in Trae CN path without overrides", () => {
+      const getMock = vi.fn().mockReturnValue(undefined);
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: getMock }),
+      } as unknown as ReturnType<typeof initDatabase>);
+
+      const platform = getPlatformById("trae-cn");
+      expect(platform).toBeDefined();
+
+      const resolvedRoot = getPlatformRootDir(platform!);
+      const resolvedPath = getPlatformSkillsDir(platform!);
+
+      expect(resolvedRoot).toContain(".trae-cn");
+      expect(resolvedPath).toContain(".trae-cn/skills");
+    });
+
+    it("resolves the built-in Cline path without overrides", () => {
+      const getMock = vi.fn().mockReturnValue(undefined);
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: getMock }),
+      } as unknown as ReturnType<typeof initDatabase>);
+
+      const platform = getPlatformById("cline");
+      expect(platform).toBeDefined();
+
+      const resolvedRoot = getPlatformRootDir(platform!);
+      const resolvedPath = getPlatformSkillsDir(platform!);
+
+      expect(resolvedRoot).toContain(".cline");
+      expect(resolvedPath).toContain(".cline/skills");
+    });
+
     it("resolves the Antigravity global skills path", () => {
       const getMock = vi.fn().mockReturnValue(undefined);
       vi.mocked(initDatabase).mockReturnValue({
@@ -179,6 +211,35 @@ describe("skill-installer-utils", () => {
       });
 
       expect(resolvedPath).toBe("/custom/windsurf/memories/global_rules.md");
+    });
+
+    it("uses built-in override relative paths when configured in settings", () => {
+      const getMock = vi.fn().mockImplementation((key: string) => {
+        if (key === "builtinAgentOverrides") {
+          return {
+            value: JSON.stringify({
+              opencode: {
+                rootPath: "/tmp/opencode-root",
+                skillsRelativePath: "custom-skills",
+                rulesRelativePath: "docs/AGENTS.md",
+              },
+            }),
+          };
+        }
+        return undefined;
+      });
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: getMock }),
+      } as unknown as ReturnType<typeof initDatabase>);
+
+      const platform = getPlatformById("opencode");
+      expect(platform).toBeDefined();
+
+      expect(getPlatformRootDir(platform!)).toBe("/tmp/opencode-root");
+      expect(getPlatformSkillsDir(platform!)).toBe("/tmp/opencode-root/custom-skills");
+      expect(getPlatformGlobalRulePath(platform!)).toBe(
+        "/tmp/opencode-root/docs/AGENTS.md",
+      );
     });
   });
 

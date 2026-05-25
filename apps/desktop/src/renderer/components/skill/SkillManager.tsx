@@ -34,6 +34,7 @@ import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
 import { getRuntimeCapabilities } from "../../runtime";
 import { useSkillStoreRemoteSync } from "./store-remote-sync";
+import { deriveSkillScanPathsFromCustomAgents } from "../../services/agent-root-paths";
 
 const MAX_STAGGERED_CARDS = 10;
 const CARD_STAGGER_MS = 50;
@@ -116,8 +117,8 @@ export function SkillManager() {
   const deployedSkillNames = useSkillStore((state) => state.deployedSkillNames);
   const loadDeployedStatus = useSkillStore((state) => state.loadDeployedStatus);
   const skillFilterTags = useSkillStore((state) => state.filterTags);
-  const customSkillScanPaths = useSettingsStore(
-    (state) => state.customSkillScanPaths,
+  const customAgents = useSettingsStore(
+    (state) => state.customAgents,
   );
   const runtimeCapabilities = getRuntimeCapabilities();
   const webSkillLibraryMode =
@@ -809,7 +810,11 @@ export function SkillManager() {
                   <>
                     <div className="h-4 w-px bg-border" />
                     <button
-                      onClick={() => handleScanLocal(customSkillScanPaths)}
+                      onClick={() =>
+                        handleScanLocal(
+                          deriveSkillScanPathsFromCustomAgents(customAgents),
+                        )
+                      }
                       disabled={isScanning}
                       className="p-2 text-muted-foreground hover:text-foreground rounded-lg hover:bg-accent transition-colors disabled:opacity-50"
                       title={t("skill.scanLocal", "Scan local skills")}

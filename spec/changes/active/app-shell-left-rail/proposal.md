@@ -60,3 +60,15 @@ PromptHub 当前的应用壳主要围绕 `Prompt` 与 `Skill` 两个一级模式
 - 用户全局 `~/.config/opencode/AGENTS.md`
 
 第一版仍不开放任意本地文件浏览器，但允许用户手动添加项目目录作为受管规则目录。
+
+## Follow-up Direction
+
+用户已经明确指出，设置页中的“额外扫描目录”只以 Skill 发现为中心，产品语义过窄，不符合 PromptHub 正在演进为 Agent 管理助手的方向。
+
+后续应将这类能力从“额外 Skill 扫描目录”升级为“Agent 根目录管理”：
+
+- 用户首先管理的是某个 agent / tool 的根目录地址，而不是零散的 `skills/` 子目录。
+- PromptHub 再从该根目录派生并预览该平台的 `skills / rules / commands / agents / config` 等已知资产路径。
+- 当平台协议允许时，用户还应能把当前项目目录登记为一个 agent workspace，而不仅仅是附加几个扫描路径。
+
+这项能力在当前迭代先记录为产品需求，不在本轮直接实现。

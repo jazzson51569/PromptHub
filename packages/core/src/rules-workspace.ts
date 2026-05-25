@@ -9,6 +9,7 @@ import {
 } from "@prompthub/shared/constants/platforms";
 import { KNOWN_RULE_FILE_TEMPLATES } from "@prompthub/shared/constants/rules";
 import type {
+  CustomRuleFileId,
   CreateRuleProjectInput,
   KnownRuleFileId,
   RuleBackupRecord,
@@ -33,6 +34,17 @@ const RULE_VERSION_LIMIT = 20;
 const RULE_META_FILE_NAME = "_rule.json";
 
 type ProjectRuleId = `project:${string}`;
+
+export interface ExtraGlobalRuleTemplate {
+  id: CustomRuleFileId;
+  platformId: RuleFileDescriptor["platformId"];
+  platformName: string;
+  platformIcon: string;
+  platformDescription: string;
+  name: string;
+  description: string;
+  group: RuleFileGroup;
+}
 
 interface AppendRuleVersionResult {
   index: StoredRuleVersionIndexEntry[];
@@ -78,6 +90,8 @@ export interface RulesWorkspaceServiceDeps {
   createRuleDb: () => RuleDB;
   getPlatformGlobalRulePath: (platform: SkillPlatform) => string | null;
   getPlatformRootDir: (platform: SkillPlatform) => string;
+  getExtraGlobalRuleTemplates?: () => ExtraGlobalRuleTemplate[];
+  getExtraGlobalRuleTargetPath?: (template: ExtraGlobalRuleTemplate) => string;
 }
 
 export interface RulesWorkspaceService {
@@ -101,6 +115,10 @@ export interface RulesWorkspaceService {
 
 function isProjectRuleFileId(ruleId: RuleFileId): ruleId is ProjectRuleId {
   return ruleId.startsWith("project:");
+}
+
+function isCustomRuleFileId(ruleId: RuleFileId): ruleId is CustomRuleFileId {
+  return ruleId.startsWith("custom:");
 }
 
 function ensureDir(targetPath: string): void {
@@ -166,6 +184,10 @@ function ruleGroupForKnownId(ruleId: RuleFileId): RuleFileGroup {
     return "workspace";
   }
 
+  if (isCustomRuleFileId(ruleId)) {
+    return "assistant";
+  }
+
   return KNOWN_RULE_FILE_TEMPLATES[ruleId].group;
 }
 
@@ -173,6 +195,22 @@ export function createRulesWorkspaceService(
   deps: RulesWorkspaceServiceDeps,
 ): RulesWorkspaceService {
   const pendingRuleVersionWrites = new Map<RuleFileId, Promise<AppendRuleVersionResult>>();
+
+  function getAllGlobalRuleTemplates(): Array<
+    | (typeof KNOWN_RULE_FILE_TEMPLATES)[KnownRuleFileId]
+    | ExtraGlobalRuleTemplate
+  > {
+    return [
+      ...Object.values(KNOWN_RULE_FILE_TEMPLATES),
+      ...(deps.getExtraGlobalRuleTemplates?.() ?? []),
+    ];
+  }
+
+  function getActiveCustomRuleIds(): Set<CustomRuleFileId> {
+    return new Set(
+      (deps.getExtraGlobalRuleTemplates?.() ?? []).map((template) => template.id),
+    );
+  }
 
   function getRuleDb(): RuleDB {
     return deps.createRuleDb();
@@ -213,6 +251,10 @@ export function createRulesWorkspaceService(
     return rulePath;
   }
 
+  function getManagedCustomRulePath(template: ExtraGlobalRuleTemplate): string {
+    return path.join(deps.getRulesDir(), "global", template.platformId, template.name);
+  }
+
   function getManagedCopyPathForGlobal(ruleId: KnownRuleFileId): string {
     const template = KNOWN_RULE_FILE_TEMPLATES[ruleId];
     return path.join(deps.getRulesDir(), "global", template.platformId, template.name);
@@ -231,6 +273,27 @@ export function createRulesWorkspaceService(
       description: template.description,
       managedPath: getManagedCopyPathForGlobal(ruleId),
       targetPath: getManagedPlatformRulePath(ruleId),
+      syncStatus: "target-missing",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
+  function buildCustomGlobalMeta(template: ExtraGlobalRuleTemplate): StoredRuleMeta {
+    const targetPath =
+      deps.getExtraGlobalRuleTargetPath?.(template) ??
+      getManagedCustomRulePath(template);
+    return {
+      id: template.id,
+      scope: "global",
+      platformId: template.platformId,
+      platformName: template.platformName,
+      platformIcon: template.platformIcon,
+      platformDescription: template.platformDescription,
+      canonicalFileName: template.name,
+      description: template.description,
+      managedPath: getManagedCustomRulePath(template),
+      targetPath,
       syncStatus: "target-missing",
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -540,21 +603,28 @@ export function createRulesWorkspaceService(
     db.replaceVersions(meta.id, toRuleVersionRecords(meta.id, versionIndex));
   }
 
-  async function ensureGlobalRuleMaterialized(ruleId: KnownRuleFileId): Promise<StoredRuleMeta> {
-    const fallbackMeta = buildGlobalMeta(ruleId);
-    const metaPath = getRuleMetaPath(fallbackMeta.managedPath);
+  async function ensureGlobalRuleMaterialized(
+    ruleId: KnownRuleFileId | CustomRuleFileId,
+  ): Promise<StoredRuleMeta> {
+    const customTemplate = deps
+      .getExtraGlobalRuleTemplates?.()
+      .find((template) => template.id === ruleId);
+    const baseMeta = customTemplate
+      ? buildCustomGlobalMeta(customTemplate)
+      : buildGlobalMeta(ruleId as KnownRuleFileId);
+    const metaPath = getRuleMetaPath(baseMeta.managedPath);
     const existingMeta = await readStoredMeta(metaPath);
     const meta = existingMeta
       ? {
           ...existingMeta,
-          targetPath: fallbackMeta.targetPath,
-          platformName: fallbackMeta.platformName,
-          platformIcon: fallbackMeta.platformIcon,
-          platformDescription: fallbackMeta.platformDescription,
-          canonicalFileName: fallbackMeta.canonicalFileName,
-          description: fallbackMeta.description,
+          targetPath: baseMeta.targetPath,
+          platformName: baseMeta.platformName,
+          platformIcon: baseMeta.platformIcon,
+          platformDescription: baseMeta.platformDescription,
+          canonicalFileName: baseMeta.canonicalFileName,
+          description: baseMeta.description,
         }
-      : fallbackMeta;
+      : baseMeta;
 
     if (!(await fileExists(meta.managedPath))) {
       const targetExists = await fileExists(meta.targetPath);
@@ -596,12 +666,19 @@ export function createRulesWorkspaceService(
   async function listCachedRuleDescriptors(): Promise<RuleFileDescriptor[]> {
     const records = getRuleDb().getAll();
     if (records.length > 0) {
+      const activeCustomRuleIds = getActiveCustomRuleIds();
       const all = records.map(descriptorFromRuleRecord);
       const filtered = (
         await Promise.all(
           all.map(async (descriptor) => {
             if (descriptor.id.startsWith("project:")) {
               return descriptor;
+            }
+
+            if (descriptor.platformId.startsWith("custom:")) {
+              return activeCustomRuleIds.has(descriptor.id as CustomRuleFileId)
+                ? descriptor
+                : null;
             }
 
             if (descriptor.exists) {
@@ -627,8 +704,8 @@ export function createRulesWorkspaceService(
 
   async function scanRuleDescriptors(): Promise<RuleFileDescriptor[]> {
     const allGlobalDescriptors = await Promise.all(
-      (Object.keys(KNOWN_RULE_FILE_TEMPLATES) as KnownRuleFileId[]).map(async (ruleId) =>
-        buildDescriptor(await ensureGlobalRuleMaterialized(ruleId)),
+      getAllGlobalRuleTemplates().map(async (template) =>
+        buildDescriptor(await ensureGlobalRuleMaterialized(template.id)),
       ),
     );
 
@@ -636,6 +713,10 @@ export function createRulesWorkspaceService(
       await Promise.all(
         allGlobalDescriptors.map(async (descriptor) => {
           if (descriptor.exists) {
+            return descriptor;
+          }
+
+          if (descriptor.platformId.startsWith("custom:")) {
             return descriptor;
           }
 

@@ -23,9 +23,9 @@ import { getRuntimeCapabilities, isWebRuntime } from '../../runtime';
 import { useRulesStore } from '../../stores/rules.store';
 import { PlatformIcon } from '../ui/PlatformIcon';
 import { useToast } from '../ui/Toast';
-import { RULE_PLATFORM_ORDER } from '@prompthub/shared/constants/rules';
 import { TagManagerModal } from '../prompt/TagManagerModal';
 import { mergePromptTagCatalog } from '../prompt/prompt-modal-utils';
+import { getOrderedGlobalRuleFiles } from '../../services/rule-platform-order';
 import {
   DESKTOP_HOME_MODULES,
   type DesktopHomeModule,
@@ -145,6 +145,7 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
   const selectRule = useRulesStore((state) => state.selectRule);
   const loadRuleFiles = useRulesStore((state) => state.loadFiles);
   const isRulesLoading = useRulesStore((state) => state.isLoading);
+  const skillPlatformOrder = useSettingsStore((state) => state.skillPlatformOrder);
   const { showToast } = useToast();
 
   const handleRescanRules = useCallback(async () => {
@@ -239,31 +240,23 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
       return haystack.includes(normalizedQuery);
     };
 
-    const globalItems = RULE_PLATFORM_ORDER
-      .map((platformId) => {
-        const file = ruleFiles.find(
-          (candidate) => candidate.platformId === platformId && !candidate.id.startsWith('project:'),
-        );
-        if (!file || !matchesRuleSearch(file)) {
-          return null;
-        }
-        return {
-          id: file.id,
-          type: 'global' as const,
-          platformId: file.platformId,
-          file,
-          path: file.path,
-          exists: file.exists,
-          active: selectedRuleId === file.id,
-          canRemove: false,
-          projectId: null,
-          description: file.description,
-          icon: file.platformIcon,
-          badge: null,
-          name: file.platformName,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
+    const globalItems = getOrderedGlobalRuleFiles(ruleFiles, skillPlatformOrder)
+      .filter((file) => matchesRuleSearch(file))
+      .map((file) => ({
+        id: file.id,
+        type: 'global' as const,
+        platformId: file.platformId,
+        file,
+        path: file.path,
+        exists: file.exists,
+        active: selectedRuleId === file.id,
+        canRemove: false,
+        projectId: null,
+        description: file.description,
+        icon: file.platformIcon,
+        badge: null,
+        name: file.platformName,
+      }));
 
     const projectItems = ruleFiles
       .filter((file) => file.id.startsWith('project:') && matchesRuleSearch(file))
@@ -295,7 +288,7 @@ export function Sidebar({ currentPage, onNavigate, layout = 'combined' }: Sideba
         items: projectItems,
       },
     ];
-  }, [ruleFiles, rulesSearchQuery, selectedRuleId]);
+  }, [ruleFiles, rulesSearchQuery, selectedRuleId, skillPlatformOrder]);
 
   const handleAddRuleProject = useCallback(async () => {
     const selectedPath = await window.electron?.selectFolder?.();

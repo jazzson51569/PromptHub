@@ -4,6 +4,29 @@
 
 import type { SkillProject } from './skill';
 
+export interface AgentAssetConfig {
+  rootPath?: string;
+  skillsRelativePath?: string;
+  rulesRelativePath?: string;
+  agentsRelativePath?: string;
+  commandsRelativePath?: string;
+  configRelativePaths?: string[];
+}
+
+export interface BuiltinAgentOverrideConfig extends AgentAssetConfig {}
+
+export interface CustomAgentConfig {
+  id: string;
+  name: string;
+  rootPath: string;
+  enabled?: boolean;
+  skillsRelativePath?: string;
+  rulesRelativePath?: string;
+  agentsRelativePath?: string;
+  commandsRelativePath?: string;
+  configRelativePaths?: string[];
+}
+
 export interface Settings {
   theme: Theme;
   language: Language;
@@ -14,7 +37,10 @@ export interface Settings {
   backgroundImageFileName?: string;
   backgroundImageOpacity?: number;
   backgroundImageBlur?: number;
+  builtinAgentOverrides?: Record<string, BuiltinAgentOverrideConfig>;
   customPlatformRootPaths?: Record<string, string>;
+  customAgents?: CustomAgentConfig[];
+  customAgentRootPaths?: string[];
   disabledPlatformIds?: string[];
   customSkillPlatformPaths?: Record<string, string>;
   skillPlatformOrder?: string[];
@@ -75,7 +101,10 @@ export const DEFAULT_SETTINGS: Settings = {
   promptTagCatalog: [],
   backgroundImageOpacity: 0.22,
   backgroundImageBlur: 14,
+  builtinAgentOverrides: {},
   customPlatformRootPaths: {},
+  customAgents: [],
+  customAgentRootPaths: [],
   disabledPlatformIds: [],
   customSkillPlatformPaths: {},
   skillPlatformOrder: [],

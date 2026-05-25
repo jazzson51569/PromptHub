@@ -52,6 +52,21 @@ In progress.
   - 设置页从“每个平台 skills 目录”迁移为“每个平台根目录 + 派生路径预览”
   - desktop renderer/store、main settings IPC、self-hosted sync、web settings/sync/import-export schema 已统一接受 `customPlatformRootPaths`
   - 保留 `customSkillPlatformPaths` 作为兼容输入；desktop main 读取旧值时会自动按平台 `skillsRelativePath` 折算回 root，避免出现 `.../skills/skills`
+- `Agent管理` 中原先的“额外扫描目录”已升级为“自定义 Agent”管理：每个条目都包含 `name + rootPath`，并支持最基本的新增、编辑、删除
+- 自定义 Agent 现已支持协议字段覆写：`skillsRelativePath`、`rulesRelativePath`、`agentsRelativePath`、`commandsRelativePath`、`configRelativePaths`
+- PromptHub 会针对每个自定义 Agent 在 UI 中预览派生出的 skill scan paths、rule files、agent directories、command directories 和 config files
+- 自定义 Agent 现在会进入“平台显示顺序”列表，和内置平台共用启用/禁用与排序状态；设置页展示改为更清晰的卡片式编辑，基础字段始终可见，高级协议字段默认折叠
+  - renderer settings store 新增 `customAgents`，并把旧的 `customSkillScanPaths` / `customAgentRootPaths` 自动迁移为新的自定义 Agent 配置；Skills 页的本地扫描入口现在会基于这些 custom agents 自动派生扫描候选路径，而不再要求用户手工维护零散 skill 目录
+- 内置平台现已显式拆分 `Trae` 与 `Trae CN`
+  - `packages/shared/constants/platforms.ts` 新增 `trae-cn`
+  - `PlatformIcon` 复用 Trae 图标渲染 `trae-cn`
+  - 默认平台顺序把 `trae-cn` 作为独立内置平台参与排序
+  - renderer store / main settings IPC 会把历史上 `trae -> ~/.trae-cn` 的 root override、disabled state、display order 自动迁移到 `trae-cn`，避免升级后出现重复平台或错位状态
+- 内置平台现已新增 `Cline`
+  - `packages/shared/constants/platforms.ts` 新增 `cline`
+  - Skills 根目录按 `~/.cline/skills` 建模
+  - Config 预览按 `~/.cline/data/settings/global-settings.json`、`providers.json`、`cline_mcp_settings.json` 派生
+  - 默认平台顺序调整为更接近主流 CLI / IDE agent 的分组顺序，并让 `Trae` / `Trae CN` 相邻展示
 - `TopBar.tsx`
   - `rules` 模式下搜索框改为只读提示态，不再误写 Prompt / Skill 搜索状态
   - 新增固定的侧栏显隐按钮，不再依赖中缝悬浮把手
@@ -88,6 +103,7 @@ In progress.
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/web lint`
 - `pnpm --filter @prompthub/desktop test -- --run tests/unit/components/skill-settings.test.tsx tests/unit/main/skill-installer-utils.test.ts tests/unit/services/self-hosted-sync.test.ts tests/unit/components/rules-manager.test.tsx tests/unit/stores/rules.store.test.ts`
+- `pnpm exec vitest run tests/unit/components/skill-settings.test.tsx tests/unit/components/use-skill-platform.test.ts tests/unit/main/skill-installer-utils.test.ts tests/unit/stores/settings-agent-roots.test.ts`
 - `pnpm --filter @prompthub/web test -- src/routes/settings.test.ts src/routes/sync.test.ts src/routes/import-export.test.ts`
 
 ### Phase 2

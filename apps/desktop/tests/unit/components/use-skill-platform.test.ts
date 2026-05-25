@@ -23,9 +23,16 @@ describe("use-skill-platform helpers", () => {
   it("uses the product default priority when no preference is saved", () => {
     const original = [
       { id: "cursor", name: "Cursor" },
+      { id: "windsurf", name: "Windsurf" },
       { id: "openclaw", name: "OpenClaw" },
       { id: "codex", name: "Codex CLI" },
       { id: "claude", name: "Claude Code" },
+      { id: "gemini", name: "Gemini CLI" },
+      { id: "cline", name: "Cline" },
+      { id: "trae", name: "Trae" },
+      { id: "trae-cn", name: "Trae CN" },
+      { id: "roo", name: "Roo Code" },
+      { id: "kiro", name: "Kiro" },
       { id: "hermes", name: "Hermes Agent" },
       { id: "opencode", name: "OpenCode" },
     ] as any;
@@ -35,19 +42,33 @@ describe("use-skill-platform helpers", () => {
     expect(sorted.map((platform) => platform.id)).toEqual([
       "claude",
       "codex",
+      "gemini",
       "opencode",
+      "cline",
+      "cursor",
+      "windsurf",
+      "kiro",
+      "roo",
+      "trae",
+      "trae-cn",
       "openclaw",
       "hermes",
-      "cursor",
     ]);
   });
 
   it("keeps saved user preference ahead of the default priority", () => {
     const original = [
       { id: "cursor", name: "Cursor" },
+      { id: "windsurf", name: "Windsurf" },
       { id: "openclaw", name: "OpenClaw" },
       { id: "codex", name: "Codex CLI" },
       { id: "claude", name: "Claude Code" },
+      { id: "gemini", name: "Gemini CLI" },
+      { id: "cline", name: "Cline" },
+      { id: "trae", name: "Trae" },
+      { id: "trae-cn", name: "Trae CN" },
+      { id: "roo", name: "Roo Code" },
+      { id: "kiro", name: "Kiro" },
       { id: "hermes", name: "Hermes Agent" },
       { id: "opencode", name: "OpenCode" },
     ] as any;
@@ -58,7 +79,14 @@ describe("use-skill-platform helpers", () => {
       "cursor",
       "claude",
       "codex",
+      "gemini",
       "opencode",
+      "cline",
+      "windsurf",
+      "kiro",
+      "roo",
+      "trae",
+      "trae-cn",
       "openclaw",
       "hermes",
     ]);

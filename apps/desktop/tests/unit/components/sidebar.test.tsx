@@ -77,6 +77,7 @@ describe("Sidebar", () => {
       skillTagsSectionHeight: 140,
       isSkillTagsSectionCollapsed: false,
       desktopHomeModules: ["prompt", "skill", "rules"],
+      skillPlatformOrder: ["claude", "codex", "gemini", "opencode", "windsurf", "custom:team-agents"],
         skillProjects: [
         {
           id: "project-1",
@@ -165,6 +166,18 @@ describe("Sidebar", () => {
           path: "/Users/test/.codeium/windsurf/memories/global_rules.md",
           exists: true,
           group: "tooling",
+        },
+        {
+          id: "custom:team-agents",
+          platformId: "custom:team-agents",
+          platformName: "Team Agents",
+          platformIcon: "Bot",
+          platformDescription: "Custom team rules",
+          name: "AGENTS.md",
+          description: "Team agent global rule file",
+          path: "/Users/test/.agents/AGENTS.md",
+          exists: true,
+          group: "assistant",
         },
       ],
       selectedRuleId: "claude-global",
@@ -260,6 +273,7 @@ describe("Sidebar", () => {
     expect(screen.getByText("Codex CLI")).toBeInTheDocument();
     expect(screen.getByText("Gemini CLI")).toBeInTheDocument();
     expect(screen.getByText("Windsurf")).toBeInTheDocument();
+    expect(screen.getByText("Team Agents")).toBeInTheDocument();
     expect(screen.getByText("Add Project Directory")).toBeInTheDocument();
 
     const claudeButton = screen.getByRole("button", { name: /Claude Code/i });

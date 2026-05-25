@@ -241,6 +241,19 @@ function toWebSettings(backup: DatabaseBackup): Settings {
     theme,
     language,
     autoSave: state.autoSave !== false,
+    builtinAgentOverrides:
+      state.builtinAgentOverrides &&
+      typeof state.builtinAgentOverrides === "object"
+        ? state.builtinAgentOverrides
+        : state.customPlatformRootPaths &&
+            typeof state.customPlatformRootPaths === "object"
+          ? Object.fromEntries(
+              Object.entries(state.customPlatformRootPaths).map(([platformId, rootPath]) => [
+                platformId,
+                { rootPath },
+              ]),
+            )
+          : {},
     customPlatformRootPaths:
       state.customPlatformRootPaths &&
       typeof state.customPlatformRootPaths === "object"
@@ -350,6 +363,7 @@ function buildDesktopSettingsSnapshot(
       themeMode: webSettings.theme,
       language: webSettings.language,
       autoSave: webSettings.autoSave,
+      builtinAgentOverrides: webSettings.builtinAgentOverrides || {},
       customPlatformRootPaths: webSettings.customPlatformRootPaths || {},
       disabledPlatformIds: webSettings.disabledPlatformIds || [],
       customSkillPlatformPaths: webSettings.customSkillPlatformPaths || {},

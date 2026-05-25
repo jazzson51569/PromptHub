@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import i18n, { changeLanguage } from "../i18n";
 import type {
+  BuiltinAgentOverrideConfig,
   CustomAgentConfig,
   Settings,
   SkillProject,
@@ -13,6 +14,7 @@ import { isPrereleaseVersion } from "../../utils/version";
 import { resolveLocalImageSrc } from "../utils/media-url";
 import { normalizeAgentRootPath } from "../services/agent-root-paths";
 import {
+  normalizeBuiltinAgentOverrides,
   normalizeCustomAgentDraft,
   normalizeCustomAgents,
 } from "../services/agent-root-paths";
@@ -105,6 +107,17 @@ function getCustomAgentRootPaths(agents: CustomAgentConfig[]): string[] {
   return normalizeAgentRootPaths(agents.map((agent) => agent.rootPath));
 }
 
+function deriveLegacyCustomPlatformRootPaths(
+  overrides: Record<string, BuiltinAgentOverrideConfig>,
+): Record<string, string> {
+  return Object.entries(overrides).reduce<Record<string, string>>((acc, [platformId, value]) => {
+    if (typeof value.rootPath === "string" && value.rootPath.trim().length > 0) {
+      acc[platformId] = value.rootPath.trim();
+    }
+    return acc;
+  }, {});
+}
+
 function isTraeCnLikePath(value: string | undefined): boolean {
   if (typeof value !== "string") {
     return false;
@@ -115,10 +128,27 @@ function isTraeCnLikePath(value: string | undefined): boolean {
 
 function migrateTraeCnPlatformState(next: Pick<
   SettingsState,
-  "customPlatformRootPaths" | "disabledPlatformIds" | "skillPlatformOrder"
+  | "builtinAgentOverrides"
+  | "customPlatformRootPaths"
+  | "disabledPlatformIds"
+  | "skillPlatformOrder"
 >): void {
+  const traeBuiltinOverride = next.builtinAgentOverrides.trae;
+  const traeCnBuiltinOverride = next.builtinAgentOverrides["trae-cn"];
   const traeRootOverride = next.customPlatformRootPaths.trae;
   const traeCnRootOverride = next.customPlatformRootPaths["trae-cn"];
+
+  if (
+    traeBuiltinOverride?.rootPath &&
+    isTraeCnLikePath(traeBuiltinOverride.rootPath) &&
+    !traeCnBuiltinOverride?.rootPath?.trim()
+  ) {
+    next.builtinAgentOverrides["trae-cn"] = {
+      ...traeBuiltinOverride,
+      rootPath: traeBuiltinOverride.rootPath.trim(),
+    };
+    delete next.builtinAgentOverrides.trae;
+  }
 
   if (isTraeCnLikePath(traeRootOverride) && !traeCnRootOverride?.trim()) {
     next.customPlatformRootPaths["trae-cn"] = traeRootOverride.trim();
@@ -580,6 +610,7 @@ interface SettingsState {
   customSkillScanPaths: string[];
   skillProjects: SkillProject[];
 
+  builtinAgentOverrides: Record<string, BuiltinAgentOverrideConfig>;
   customPlatformRootPaths: Record<string, string>;
   disabledPlatformIds: string[];
   customSkillPlatformPaths: Record<string, string>;
@@ -722,6 +753,11 @@ interface SettingsState {
     >,
   ) => void;
   removeSkillProject: (projectId: string) => void;
+  updateBuiltinAgentOverride: (
+    platformId: string,
+    updates: BuiltinAgentOverrideConfig,
+  ) => void;
+  resetBuiltinAgentOverride: (platformId: string) => void;
   setCustomPlatformRootPath: (platformId: string, path: string) => void;
   resetCustomPlatformRootPath: (platformId: string) => void;
   setDisabledPlatformIds: (platformIds: string[]) => void;
@@ -751,6 +787,12 @@ function syncSettingsToMain(settings: Partial<Settings>): void {
     .catch((error: unknown) =>
       console.warn("Failed to sync settings to main process:", error),
     );
+}
+
+function refreshRulesWorkspace(): void {
+  void import("./rules.store").then(({ useRulesStore }) => {
+    void useRulesStore.getState().loadFiles({ force: true });
+  });
 }
 
 function sanitizeGithubToken(token: string): string {
@@ -793,6 +835,19 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
   const normalizedCustomAgents = normalizeCustomAgents(
     settings.customAgents ?? state.customAgents,
   );
+  const normalizedBuiltinAgentOverrides = normalizeBuiltinAgentOverrides(
+    settings.builtinAgentOverrides ?? state.builtinAgentOverrides,
+  );
+  const fallbackBuiltinAgentOverrides =
+    Object.keys(normalizedBuiltinAgentOverrides).length > 0
+      ? normalizedBuiltinAgentOverrides
+      : normalizeBuiltinAgentOverrides(
+          Object.fromEntries(
+            Object.entries(settings.customPlatformRootPaths ?? {}).map(
+              ([platformId, rootPath]) => [platformId, { rootPath }],
+            ),
+          ),
+        );
   const fallbackCustomAgentRootPaths = normalizeAgentRootPaths(
     normalizedCustomAgents.length > 0
       ? normalizedCustomAgents.map((agent) => agent.rootPath)
@@ -803,6 +858,10 @@ export async function loadSettingsFromMainProcess(): Promise<void> {
 
   useSettingsStore.setState({
     customAgents: normalizedCustomAgents,
+    builtinAgentOverrides: fallbackBuiltinAgentOverrides,
+    customPlatformRootPaths: deriveLegacyCustomPlatformRootPaths(
+      fallbackBuiltinAgentOverrides,
+    ),
     customAgentRootPaths:
       normalizedCustomAgents.length > 0
         ? getCustomAgentRootPaths(normalizedCustomAgents)
@@ -954,6 +1013,7 @@ export const useSettingsStore = create<SettingsState>()(
         customAgentRootPaths: [],
         customSkillScanPaths: [],
         skillProjects: [],
+        builtinAgentOverrides: {},
         customPlatformRootPaths: {},
         disabledPlatformIds: [],
         customSkillPlatformPaths: {},
@@ -1550,6 +1610,7 @@ export const useSettingsStore = create<SettingsState>()(
             customAgents: normalizedAgents,
             customAgentRootPaths: nextPaths,
           });
+          refreshRulesWorkspace();
         },
         addCustomAgent: (input) => {
           const nextAgent = normalizeCustomAgentDraft(input);
@@ -1721,28 +1782,47 @@ export const useSettingsStore = create<SettingsState>()(
           setTouched({ skillProjects: nextProjects });
           syncSettingsToMain({ skillProjects: nextProjects });
         },
-        setCustomPlatformRootPath: (platformId, pathValue) => {
-          const normalizedPath = pathValue.trim();
-          const nextPaths = { ...get().customPlatformRootPaths };
-          if (normalizedPath) {
-            nextPaths[platformId] = normalizedPath;
-          } else {
-            delete nextPaths[platformId];
-          }
-          setTouched({ customPlatformRootPaths: nextPaths });
-          syncSettingsToMain({ customPlatformRootPaths: nextPaths });
-          void import("./rules.store").then(({ useRulesStore }) => {
-            void useRulesStore.getState().loadFiles({ force: true });
+        updateBuiltinAgentOverride: (platformId, updates) => {
+          const nextOverrides = {
+            ...get().builtinAgentOverrides,
+            [platformId]: updates,
+          };
+          const normalizedOverrides = normalizeBuiltinAgentOverrides(nextOverrides);
+          const nextLegacyRootPaths = deriveLegacyCustomPlatformRootPaths(
+            normalizedOverrides,
+          );
+          setTouched({
+            builtinAgentOverrides: normalizedOverrides,
+            customPlatformRootPaths: nextLegacyRootPaths,
           });
+          syncSettingsToMain({
+            builtinAgentOverrides: normalizedOverrides,
+            customPlatformRootPaths: nextLegacyRootPaths,
+          });
+          refreshRulesWorkspace();
+        },
+        resetBuiltinAgentOverride: (platformId) => {
+          const nextOverrides = { ...get().builtinAgentOverrides };
+          delete nextOverrides[platformId];
+          const normalizedOverrides = normalizeBuiltinAgentOverrides(nextOverrides);
+          const nextLegacyRootPaths = deriveLegacyCustomPlatformRootPaths(
+            normalizedOverrides,
+          );
+          setTouched({
+            builtinAgentOverrides: normalizedOverrides,
+            customPlatformRootPaths: nextLegacyRootPaths,
+          });
+          syncSettingsToMain({
+            builtinAgentOverrides: normalizedOverrides,
+            customPlatformRootPaths: nextLegacyRootPaths,
+          });
+          refreshRulesWorkspace();
+        },
+        setCustomPlatformRootPath: (platformId, pathValue) => {
+          get().updateBuiltinAgentOverride(platformId, { rootPath: pathValue });
         },
         resetCustomPlatformRootPath: (platformId) => {
-          const nextPaths = { ...get().customPlatformRootPaths };
-          delete nextPaths[platformId];
-          setTouched({ customPlatformRootPaths: nextPaths });
-          syncSettingsToMain({ customPlatformRootPaths: nextPaths });
-          void import("./rules.store").then(({ useRulesStore }) => {
-            void useRulesStore.getState().loadFiles({ force: true });
-          });
+          get().resetBuiltinAgentOverride(platformId);
         },
         setDisabledPlatformIds: (platformIds) => {
           const normalized = Array.from(
@@ -1755,6 +1835,7 @@ export const useSettingsStore = create<SettingsState>()(
           );
           setTouched({ disabledPlatformIds: normalized });
           syncSettingsToMain({ disabledPlatformIds: normalized });
+          refreshRulesWorkspace();
         },
         setRulePlatformTracked: (platformId, tracked) => {
           const disabledIds = new Set(get().disabledPlatformIds);
@@ -1766,6 +1847,7 @@ export const useSettingsStore = create<SettingsState>()(
           const normalized = Array.from(disabledIds);
           setTouched({ disabledPlatformIds: normalized });
           syncSettingsToMain({ disabledPlatformIds: normalized });
+          refreshRulesWorkspace();
         },
         setCustomSkillPlatformPath: (platformId, pathValue) => {
           get().setCustomPlatformRootPath(platformId, pathValue);
@@ -1831,7 +1913,7 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: "prompthub-settings",
-      version: 13,
+      version: 14,
       partialize: stripEphemeralSettings,
       merge: (persistedState, currentState) => {
         const next = {
@@ -1946,6 +2028,16 @@ export const useSettingsStore = create<SettingsState>()(
           next.customSkillScanPaths = [...next.customAgentRootPaths];
         }
         if (
+          !next.builtinAgentOverrides ||
+          typeof next.builtinAgentOverrides !== "object" ||
+          Array.isArray(next.builtinAgentOverrides)
+        ) {
+          next.builtinAgentOverrides = {};
+        }
+        next.builtinAgentOverrides = normalizeBuiltinAgentOverrides(
+          next.builtinAgentOverrides,
+        );
+        if (
           !next.customPlatformRootPaths ||
           typeof next.customPlatformRootPaths !== "object" ||
           Array.isArray(next.customPlatformRootPaths)
@@ -1984,6 +2076,22 @@ export const useSettingsStore = create<SettingsState>()(
         ) {
           next.customPlatformRootPaths = { ...next.customSkillPlatformPaths };
         }
+        if (
+          Object.keys(next.builtinAgentOverrides).length === 0 &&
+          Object.keys(next.customPlatformRootPaths).length > 0
+        ) {
+          next.builtinAgentOverrides = normalizeBuiltinAgentOverrides(
+            Object.fromEntries(
+              Object.entries(next.customPlatformRootPaths).map(([platformId, rootPath]) => [
+                platformId,
+                { rootPath },
+              ]),
+            ),
+          );
+        }
+        next.customPlatformRootPaths = deriveLegacyCustomPlatformRootPaths(
+          next.builtinAgentOverrides,
+        );
         if (
           version <= 11 &&
           Array.isArray(next.disabledPlatformIds) &&
@@ -2142,6 +2250,7 @@ export const useSettingsStore = create<SettingsState>()(
           backgroundImageBlur: state?.backgroundImageBlur,
         });
         syncSettingsToMain({
+          builtinAgentOverrides: state?.builtinAgentOverrides || {},
           customAgents: state?.customAgents || [],
           customAgentRootPaths: state?.customAgentRootPaths || [],
           customPlatformRootPaths: state?.customPlatformRootPaths || {},

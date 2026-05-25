@@ -203,6 +203,7 @@ describe("self-hosted-sync", () => {
           themeMode: "dark",
           language: "en",
           autoSave: false,
+          builtinAgentOverrides: { claude: { rootPath: "/tmp/claude-root" } },
           customPlatformRootPaths: { claude: "/tmp/claude-root" },
         },
       },
@@ -275,6 +276,7 @@ describe("self-hosted-sync", () => {
               theme: string;
               language: string;
               autoSave: boolean;
+              builtinAgentOverrides: Record<string, { rootPath?: string }>;
               customPlatformRootPaths: Record<string, string>;
             };
           };
@@ -299,8 +301,10 @@ describe("self-hosted-sync", () => {
           theme: "dark",
           language: "en",
           autoSave: false,
+          builtinAgentOverrides: { claude: { rootPath: "/tmp/claude-root" } },
           customPlatformRootPaths: { claude: "/tmp/claude-root" },
           customSkillPlatformPaths: {},
+          disabledPlatformIds: [],
           sync: {
             enabled: false,
             provider: "manual",

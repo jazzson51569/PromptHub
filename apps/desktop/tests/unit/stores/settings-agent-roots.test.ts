@@ -153,4 +153,26 @@ describe("settings store agent roots", () => {
       "~/.legacy-agents",
     ]);
   });
+
+  it("migrates legacy built-in root overrides into builtinAgentOverrides", async () => {
+    localStorage.setItem(
+      "prompthub-settings",
+      JSON.stringify({
+        state: {
+          customPlatformRootPaths: { opencode: "~/.opencode-custom" },
+        },
+        version: 13,
+      }),
+    );
+
+    const { useSettingsStore } = await importStore();
+
+    expect(useSettingsStore.getState().builtinAgentOverrides).toEqual({
+      opencode: { rootPath: "~/.opencode-custom" },
+    });
+    expect(useSettingsStore.getState().customPlatformRootPaths).toEqual({
+      opencode: "~/.opencode-custom",
+    });
+  });
+
 });

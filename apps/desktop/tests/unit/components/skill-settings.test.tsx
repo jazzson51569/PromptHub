@@ -21,6 +21,9 @@ function createSettingsState() {
   return {
     skillInstallMethod: "symlink",
     setSkillInstallMethod: vi.fn(),
+    builtinAgentOverrides: {},
+    updateBuiltinAgentOverride: vi.fn(),
+    resetBuiltinAgentOverride: vi.fn(),
     customPlatformRootPaths: {},
     disabledPlatformIds: [],
     setCustomPlatformRootPath: vi.fn(),
@@ -180,8 +183,8 @@ describe("SkillSettings", () => {
     });
 
     expect(screen.getAllByText("Team Agents").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Derived skill scan paths/)).toBeInTheDocument();
-    expect(screen.getByText(/Derived agent directories/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Derived skill scan paths/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Derived agent directories/).length).toBeGreaterThan(0);
   });
 
   it("fills the custom agent root path from folder picker", async () => {
@@ -254,5 +257,128 @@ describe("SkillSettings", () => {
     const moveDownButton = buttons[2];
 
     expect(moveDownButton).toBeDisabled();
+  });
+
+  it("updates built-in agent override fields from the unified config section", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue(settingsState);
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const configSection = screen.getByText("Agent Configurations").closest("section, div");
+    expect(configSection).toBeTruthy();
+
+    expect(
+      within(configSection as HTMLElement).queryByPlaceholderText(
+        "Leave empty to use the default root, e.g. ~/.trae-cn",
+      ),
+    ).not.toBeInTheDocument();
+
+    const platformCards = within(configSection as HTMLElement).getAllByText("Edit");
+    fireEvent.click(platformCards[0]!);
+
+    const rootInput = within(configSection as HTMLElement).getByPlaceholderText(
+      "Leave empty to use the default root, e.g. ~/.trae-cn",
+    ) as HTMLInputElement;
+
+    expect(rootInput.value).not.toBe("");
+
+    fireEvent.change(rootInput, { target: { value: "/tmp/opencode-root" } });
+
+    expect(settingsState.updateBuiltinAgentOverride).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(settingsState.updateBuiltinAgentOverride).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ rootPath: "/tmp/opencode-root" }),
+    );
+  });
+
+  it("resets built-in edit form without persisting until save", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue({
+      ...settingsState,
+      builtinAgentOverrides: {
+        claude: {
+          rootPath: "/tmp/claude-root",
+          rulesRelativePath: "custom/CLAUDE.md",
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const configSection = screen.getByText("Agent Configurations").closest("section, div");
+    expect(configSection).toBeTruthy();
+
+    const claudeCard = within(configSection as HTMLElement)
+      .getAllByText("Claude Code")[0]
+      .closest("[data-platform-config-id]");
+    expect(claudeCard).toBeTruthy();
+
+    fireEvent.click(within(claudeCard as HTMLElement).getByRole("button", { name: "Edit" }));
+
+    const rootInput = screen.getByPlaceholderText(
+      "Leave empty to use the default root, e.g. ~/.trae-cn",
+    ) as HTMLInputElement;
+    const rulesInput = screen.getByPlaceholderText(
+      "rules file path (optional)",
+    ) as HTMLInputElement;
+    fireEvent.change(rootInput, { target: { value: "/tmp/changed-root" } });
+    fireEvent.change(rulesInput, { target: { value: "tmp/custom-rule.md" } });
+
+    fireEvent.click(
+      within(claudeCard as HTMLElement).getByRole("button", { name: "Use Default" }),
+    );
+
+    expect(settingsState.updateBuiltinAgentOverride).not.toHaveBeenCalled();
+    expect(
+      (screen.getByPlaceholderText(
+        "rules file path (optional)",
+      ) as HTMLInputElement).value,
+    ).not.toBe("tmp/custom-rule.md");
+  });
+
+  it("saves cleared built-in override fields as defaults instead of keeping stale values", async () => {
+    const settingsState = createSettingsState();
+    useSettingsStoreMock.mockReturnValue({
+      ...settingsState,
+      builtinAgentOverrides: {
+        claude: {
+          rootPath: "/tmp/claude-root",
+          rulesRelativePath: "custom/CLAUDE.md",
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillSettings />, { language: "en" });
+    });
+
+    const configSection = screen.getByText("Agent Configurations").closest("section, div");
+    expect(configSection).toBeTruthy();
+
+    const claudeCard = within(configSection as HTMLElement)
+      .getAllByText("Claude Code")[0]
+      .closest("[data-platform-config-id]");
+    expect(claudeCard).toBeTruthy();
+
+    fireEvent.click(within(claudeCard as HTMLElement).getByRole("button", { name: "Edit" }));
+
+    const rulesInput = screen.getByPlaceholderText(
+      "rules file path (optional)",
+    ) as HTMLInputElement;
+    fireEvent.change(rulesInput, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(settingsState.updateBuiltinAgentOverride).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.not.objectContaining({ rulesRelativePath: "custom/CLAUDE.md" }),
+    );
   });
 });

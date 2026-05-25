@@ -5,11 +5,13 @@ import {
 import type { AIProtocol } from "./ai";
 
 export type KnownRuleFileId = keyof typeof KNOWN_RULE_FILE_TEMPLATES;
+export type CustomRuleFileId = `custom:${string}`;
 export type RulePlatformId =
   | (typeof KNOWN_RULE_FILE_TEMPLATES)[keyof typeof KNOWN_RULE_FILE_TEMPLATES]["platformId"]
+  | `custom:${string}`
   | "workspace";
 
-export type RuleFileId = KnownRuleFileId | `project:${string}`;
+export type RuleFileId = KnownRuleFileId | CustomRuleFileId | `project:${string}`;
 
 export type RuleFileGroup = (typeof RULE_FILE_GROUPS)[number];
 
@@ -119,11 +121,19 @@ export interface RuleRewriteResult {
 }
 
 export function isRuleFileId(value: string): value is RuleFileId {
-  return value.startsWith('project:') || value in KNOWN_RULE_FILE_TEMPLATES;
+  return (
+    value.startsWith('project:') ||
+    value.startsWith('custom:') ||
+    value in KNOWN_RULE_FILE_TEMPLATES
+  );
 }
 
 export function isRulePlatformId(value: string): value is RulePlatformId {
   if (value === 'workspace') {
+    return true;
+  }
+
+  if (value.startsWith('custom:')) {
     return true;
   }
 

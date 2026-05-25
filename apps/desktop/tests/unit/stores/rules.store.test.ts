@@ -106,6 +106,66 @@ describe("rules store", () => {
     ]);
   });
 
+  it("includes custom global rules in sidebar sections after preferred built-in platforms", async () => {
+    useSettingsStore.setState({
+      disabledPlatformIds: [],
+      skillPlatformOrder: ["claude", "custom:team-agents"],
+    });
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "custom:team-agents",
+              platformId: "custom:team-agents",
+              platformName: "Team Agents",
+              platformIcon: "Bot",
+              platformDescription: "Custom team rules",
+              name: "AGENTS.md",
+              description: "Global rules for Team Agents.",
+              path: "/Users/test/.agents/AGENTS.md",
+              exists: true,
+              group: "assistant",
+            },
+            {
+              id: "claude-global",
+              platformId: "claude",
+              platformName: "Claude Code",
+              platformIcon: "claude",
+              platformDescription: "Claude rules",
+              name: "CLAUDE.md",
+              description: "Claude global rule file",
+              path: "/Users/test/.claude/CLAUDE.md",
+              exists: true,
+              group: "assistant",
+            },
+          ]),
+          read: vi.fn().mockResolvedValue({
+            id: "custom:team-agents",
+            platformId: "custom:team-agents",
+            platformName: "Team Agents",
+            platformIcon: "Bot",
+            platformDescription: "Custom team rules",
+            name: "AGENTS.md",
+            description: "Global rules for Team Agents.",
+            path: "/Users/test/.agents/AGENTS.md",
+            exists: true,
+            group: "assistant",
+            content: "# Team rules",
+            versions: [],
+          }),
+        },
+      },
+    });
+
+    await useRulesStore.getState().loadFiles();
+
+    expect(useRulesStore.getState().getSidebarSections()[0]?.items).toEqual([
+      expect.objectContaining({ id: "claude-global" }),
+      expect.objectContaining({ id: "custom:team-agents" }),
+    ]);
+  });
+
   it("hides disabled global rules even when the target file exists", async () => {
     useSettingsStore.setState({
       disabledPlatformIds: ["claude"],
@@ -132,6 +192,107 @@ describe("rules store", () => {
     });
 
     await useRulesStore.getState().loadFiles();
+
+    expect(useRulesStore.getState().files).toEqual([]);
+  });
+
+  it("keeps custom rules hidden after disabling their platform in settings", async () => {
+    useSettingsStore.setState({
+      disabledPlatformIds: ["custom:team-agents"],
+    });
+    installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "custom:team-agents",
+              platformId: "custom:team-agents",
+              platformName: "Team Agents",
+              platformIcon: "Bot",
+              platformDescription: "Custom team rules",
+              name: "AGENTS.md",
+              description: "Global rules for Team Agents.",
+              path: "/Users/test/.agents/AGENTS.md",
+              exists: true,
+              group: "assistant",
+            },
+          ]),
+        },
+      },
+    });
+
+    await useRulesStore.getState().loadFiles();
+
+    expect(useRulesStore.getState().files).toEqual([]);
+  });
+
+  it("updates visible custom rules after settings change and a forced reload", async () => {
+    const list = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          id: "custom:team-agents",
+          platformId: "custom:team-agents",
+          platformName: "Team Agents",
+          platformIcon: "Bot",
+          platformDescription: "Custom team rules",
+          name: "AGENTS.md",
+          description: "Global rules for Team Agents.",
+          path: "/Users/test/.agents/AGENTS.md",
+          exists: true,
+          group: "assistant",
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "custom:team-agents",
+          platformId: "custom:team-agents",
+          platformName: "Team Agents",
+          platformIcon: "Bot",
+          platformDescription: "Custom team rules",
+          name: "AGENTS.md",
+          description: "Global rules for Team Agents.",
+          path: "/Users/test/.agents/AGENTS.md",
+          exists: true,
+          group: "assistant",
+        },
+      ]);
+
+    installWindowMocks({
+      api: {
+        rules: {
+          list,
+          scan: list,
+          read: vi.fn().mockResolvedValue({
+            id: "custom:team-agents",
+            platformId: "custom:team-agents",
+            platformName: "Team Agents",
+            platformIcon: "Bot",
+            platformDescription: "Custom team rules",
+            name: "AGENTS.md",
+            description: "Global rules for Team Agents.",
+            path: "/Users/test/.agents/AGENTS.md",
+            exists: true,
+            group: "assistant",
+            content: "# Team rules",
+            versions: [],
+          }),
+        },
+      },
+    });
+
+    useSettingsStore.setState({
+      disabledPlatformIds: [],
+      skillPlatformOrder: ["custom:team-agents"],
+    });
+
+    await useRulesStore.getState().loadFiles();
+    expect(useRulesStore.getState().files).toEqual([
+      expect.objectContaining({ id: "custom:team-agents" }),
+    ]);
+
+    useSettingsStore.setState({ disabledPlatformIds: ["custom:team-agents"] });
+    await useRulesStore.getState().loadFiles({ force: true });
 
     expect(useRulesStore.getState().files).toEqual([]);
   });

@@ -50,7 +50,8 @@ describe("settings store -> rules sync", () => {
     await vi.dynamicImportSettled();
 
     expect(loadFilesMock).toHaveBeenCalledWith({ force: true });
-    expect(settingsSetMock).toHaveBeenCalledWith({
+    expect(settingsSetMock).toHaveBeenLastCalledWith({
+      builtinAgentOverrides: { opencode: { rootPath: "/tmp/opencode-root" } },
       customPlatformRootPaths: { opencode: "/tmp/opencode-root" },
     });
   });

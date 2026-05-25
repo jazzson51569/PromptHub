@@ -1,7 +1,7 @@
 import { useSettingsStore } from "./settings.store";
 import { create } from "zustand";
-import { RULE_PLATFORM_ORDER } from "@prompthub/shared/constants/rules";
 import { scheduleAllSaveSync } from "../services/webdav-save-sync";
+import { getOrderedGlobalRuleFiles } from "../services/rule-platform-order";
 import type {
   CreateRuleProjectInput,
   RuleFileContent,
@@ -310,31 +310,22 @@ export const useRulesStore = create<RulesState>((set, get) => ({
 
   getSidebarSections: () => {
     const { files, selectedRuleId } = get();
-    const globalItems = RULE_PLATFORM_ORDER
-      .map((platformId) => {
-        const file = files.find(
-          (candidate) => candidate.platformId === platformId && !candidate.id.startsWith("project:"),
-        );
-        if (!file) {
-          return null;
-        }
-        return {
-          id: file.id,
-          type: "global" as const,
-          platformId: file.platformId,
-          file,
-          path: file.path,
-          exists: file.exists,
-          active: selectedRuleId === file.id,
-          canRemove: true,
-          projectId: null,
-          description: file.description,
-          icon: file.platformIcon,
-          badge: null,
-          name: file.platformName,
-        };
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
+    const skillPlatformOrder = useSettingsStore.getState().skillPlatformOrder ?? [];
+    const globalItems = getOrderedGlobalRuleFiles(files, skillPlatformOrder).map((file) => ({
+      id: file.id,
+      type: "global" as const,
+      platformId: file.platformId,
+      file,
+      path: file.path,
+      exists: file.exists,
+      active: selectedRuleId === file.id,
+      canRemove: true,
+      projectId: null,
+      description: file.description,
+      icon: file.platformIcon,
+      badge: null,
+      name: file.platformName,
+    }));
 
     const projectItems = files
       .filter((file) => file.id.startsWith("project:"))
@@ -357,12 +348,12 @@ export const useRulesStore = create<RulesState>((set, get) => ({
     return [
       {
         id: "global" as const,
-        title: "Global Rules",
+        title: "",
         items: globalItems,
       },
       {
         id: "project" as const,
-        title: "Project Rules",
+        title: "",
         items: projectItems,
       },
     ];

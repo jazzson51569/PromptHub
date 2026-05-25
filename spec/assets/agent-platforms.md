@@ -19,6 +19,12 @@
 - 对没有公开官方文档、正文不可抓取、或当前只能通过产品 UI/登录后页面确认的平台，必须明确标注为 `PromptHub inferred` 或 `Evidence limited`。
 - 对于“功能存在但本轮未拿到明确本地路径”的资产，可以记录为“feature documented, local path not confirmed in current pass”，不要伪装成已确认路径。
 
+## Product Modeling Note
+
+- 对 PromptHub 而言，Agent 平台的首要配置对象应是“平台根目录”，而不是单独的 `skills` 扫描路径。
+- `skills / rules / commands / agents / workflows / config` 等都属于从根目录派生出的本地资产表面。
+- 因此设置页和后续 Agent 管理页应优先暴露根目录管理与派生资产预览；仅保留零散扫描路径会把产品错误收窄成 Skill 导入工具。
+
 ## Evidence Levels
 
 - `Officially documented`: 官方文档明确写出路径、文件名、目录结构或优先级。
@@ -77,6 +83,7 @@
 | Claude Code | `~/.claude` | `~/.claude/CLAUDE.md`, project `CLAUDE.md`, `./.claude/CLAUDE.md`, `CLAUDE.local.md`, `.claude/rules/**/*.md` | Per-project auto memory in `~/.claude/projects/<project>/memory/` with `MEMORY.md` entrypoint | `.claude/skills/<name>/SKILL.md`; subagents documented; `@AGENTS.md` import supported | user / local / managed settings documented; exact settings file set not re-listed here | Officially documented |
 | Codex CLI | `~/.codex` | `AGENTS.override.md` or `AGENTS.md`; per-directory discovery; fallback names configurable in `config.toml` | `~/.codex/memories/`; Chronicle in `~/.codex/memories_extensions/chronicle/`; temp captures in `$TMPDIR/chronicle/screen_recording/`; logs in `~/.codex/log/` and optional `session-*.jsonl` | Skills in `.agents/skills/`, `~/.agents/skills/`, `/etc/codex/skills`; subagents and workflows documented | `~/.codex/config.toml`, `.codex/config.toml`, `/etc/codex/config.toml`, `--profile`, `CODEX_HOME` | Officially documented |
 | Gemini CLI | `~/.gemini` | `~/.gemini/GEMINI.md`; workspace `GEMINI.md`; customizable `context.fileName`; `/memory` manages loaded context | Session transcripts under `~/.gemini/tmp/<project>/chats/`; resume / rewind / checkpointing documented; project memory inbox and patch workflow documented but not all canonical directories are named on one page | Skills in `~/.gemini/skills/`, `.gemini/skills/`, plus `.agents/skills/` aliases; commands in `~/.gemini/commands/`, `.gemini/commands/` | `~/.gemini/settings.json`, `.gemini/settings.json`; experimental flags for auto memory / memory v2 / model steering | Officially documented |
+| Cline | `~/.cline` | `AGENTS.md`; `.clinerules/`; `~/Documents/Cline/Rules`; project `.cline/` instruction assets | Session data in `~/.cline/data/sessions/`; additional db state under `~/.cline/data/db/` | `~/.cline/skills/`, `.cline/skills/`, `~/.cline/agents/`, `.cline/agents/`, plugins / hooks / workflows documented | `~/.cline/data/settings/global-settings.json`, `providers.json`, `cline_mcp_settings.json` | Officially documented |
 | OpenClaw | `~/.openclaw` | workspace bootstrap files in `~/.openclaw/workspace` (or `workspace-<profile>`), including `AGENTS.md`, `SOUL.md`, `USER.md`, `IDENTITY.md`, `TOOLS.md`, optional `HEARTBEAT.md` / `BOOT.md` / `BOOTSTRAP.md` | Session store in `~/.openclaw/agents/<agentId>/sessions/sessions.json`; transcripts in `~/.openclaw/agents/<agentId>/sessions/<sessionId>.jsonl`; daily memory in workspace `memory/YYYY-MM-DD.md`; long-term memory `MEMORY.md`; dreaming surface `DREAMS.md`; gateway logs in `/tmp/openclaw/openclaw-YYYY-MM-DD.log` | Workspace skills in `~/.openclaw/workspace/skills/`; managed skills in `~/.openclaw/skills/`; canvas files in workspace `canvas/` | `~/.openclaw/openclaw.json`; profile-specific workspace via `OPENCLAW_PROFILE`; sandbox workspaces in `~/.openclaw/sandboxes` | Officially documented |
 | OpenCode | `~/.config/opencode` | `~/.config/opencode/AGENTS.md`; local traversal of `AGENTS.md`; Claude fallback `CLAUDE.md`; extra `instructions` via `opencode.json` | Snapshot / undo feature documented; canonical persisted conversation-history path not confirmed in current pass | Agents in `agents/`; skills in `skills/`; commands in `commands/`; plugins in `plugins/`; modes in `modes/` | `~/.config/opencode/opencode.json`, `~/.config/opencode/tui.json`, project `opencode.json`, env-based overrides, managed configs | Officially documented |
 | Cursor | `~/.cursor` | `.cursor/rules/` project rules; `AGENTS.md` in root and subdirectories; user rules and team rules documented | No public local memory / transcript / checkpoint path confirmed in current pass | Rule files in `.cursor/rules/`; no official local `skills/` directory confirmed in current pass | Team rules via dashboard; public local user-rule file path not confirmed in current pass | Officially documented (partial) |
@@ -94,10 +101,25 @@
 | --- | --- | --- | --- | --- |
 | Antigravity | `antigravity` | `~/.gemini/antigravity` | root dir + `skills/` convention only | PromptHub inferred |
 | Trae | `trae` | `~/.trae` | root dir + `skills/` convention only | PromptHub inferred |
+| Trae CN | `trae` | `~/.trae-cn` | same built-in Trae platform id with localized CN root override already referenced by tests and UI placeholders | PromptHub inferred |
 | Qoder | `qoder` | `~/.qoder` | root dir + `skills/` convention only | PromptHub inferred |
 | QoderWorker | `qoderwork` | `~/.qoderwork` | root dir + `skills/` convention only | PromptHub inferred |
 | Hermes Agent | `hermes` | `~/.hermes` | root dir + `skills/` convention only | PromptHub inferred |
 | CodeBuddy | `codebuddy` | `~/.codebuddy` | root dir + `skills/` convention only | PromptHub inferred |
+
+### Strong Candidates For Future Built-in Support
+
+以下平台在本轮调研中具备比“仅知道产品名”更强的公开本地资产证据，适合作为后续内置 Agent / 预制平台候选。它们当前还没有作为 PromptHub 的一等内置平台进入 `packages/shared/constants/platforms.ts`。
+
+| Platform | Why it stands out | Public local asset evidence | Suggested PromptHub modeling status |
+| --- | --- | --- | --- |
+| Kilo Code | 官方文档已明确 `.kilo/skills/`、`~/.kilo/skills/`、`kilo.jsonc`、`.kilo/rules/`、`AGENTS.md`、`.agents/skills/` 兼容目录 | `.kilo/skills/`, `~/.kilo/skills/`, `.kilo/rules/`, `kilo.jsonc`, global `~/.config/kilo/kilo.jsonc`, `AGENTS.md` | High-priority built-in candidate |
+| Trae CN | 官网和文案显示中国区独立产品面存在；仓库现有测试和 placeholder 已长期使用 `~/.trae-cn` 作为默认根目录示例 | `~/.trae-cn` is already referenced in PromptHub tests and locale placeholders; product docs entry available via `docs.trae.cn` | Should be made explicit in user-facing platform docs and likely split as a visible preset |
+
+建模建议：
+
+- `Trae CN` 更像是 `Trae` 的区域化 root preset，而不是完全不同的协议；UI 层可以先暴露为内置预设，再决定是否拆成独立 `platform.id`。
+- `Kilo Code` 仍适合后续新增独立 built-in platform，因为它已经有稳定的 rules / skills / agent assets 结构，不只是单一 `skills/` 目录。
 
 ## Platform Cards
 
@@ -211,6 +233,31 @@
   - OpenClaw is no longer just a PromptHub-inferred root-directory target; current public docs are sufficient to model its workspace files, memory surfaces, session persistence, and logs as stable local assets.
   - PromptHub runtime still does not expose OpenClaw under the `Rules` global-file whitelist, because the current `Rules` UX models one canonical global file per platform rather than a multi-file workspace bootstrap surface.
 
+### Cline
+
+- Root: `~/.cline`
+- Rules and context:
+  - project-level `AGENTS.md`
+  - `.clinerules/` workspace rules
+  - global compatibility rules in `~/Documents/Cline/Rules`
+  - project `.cline/` directory is part of the stable local config surface
+- Memory and state:
+  - session state under `~/.cline/data/sessions/`
+  - additional persistent db state under `~/.cline/data/db/`
+- Reusable assets:
+  - global skills in `~/.cline/skills/`
+  - project skills in `.cline/skills/`
+  - global agents in `~/.cline/agents/`
+  - project agents in `.cline/agents/`
+  - plugins / hooks / workflows share the same root family
+- Config and settings:
+  - `~/.cline/data/settings/global-settings.json`
+  - `~/.cline/data/settings/providers.json`
+  - `~/.cline/data/settings/cline_mcp_settings.json`
+- Modeling note:
+  - PromptHub now exposes Cline as a built-in platform for root-directory-based Skill integration and asset preview.
+  - Cline is not added to the current `Rules` global single-file whitelist because its public rule surface is directory-oriented and AGENTS-based rather than one canonical user-level markdown file.
+
 ### Cursor
 
 - Root convention in PromptHub: `~/.cursor`
@@ -309,6 +356,17 @@
 - Modeling note:
   - keep Amp in the platform list, but do not assert rules / skills / workflow subpaths as official facts until public docs are available.
 
+### Trae / Trae CN
+
+- PromptHub currently models Trae with a single built-in platform id: `trae`
+- Public product evidence confirms a China-region Trae surface via `trae.com.cn` / `docs.trae.cn`
+- Current PromptHub implementation evidence:
+  - localized placeholders already use `~/.trae-cn`
+  - unit tests already verify custom platform root resolution against `~/.trae-cn`
+- Modeling note:
+  - this means `Trae CN` is already implicitly part of the product's compatibility story, but the stable platform docs had not been updated to say so explicitly.
+  - until official local skills/rules path docs are captured, treat `Trae CN` as `Trae` root-path preset evidence rather than a fully separate documented filesystem contract.
+
 ## Evidence Links
 
 - Claude Code memory and CLAUDE.md: `https://docs.anthropic.com/en/docs/claude-code/memory`
@@ -344,6 +402,14 @@
 - Roo Code slash commands: `https://docs.roocode.com/features/slash-commands`
 - Roo Code checkpoints: `https://docs.roocode.com/features/checkpoints`
 - GitHub Copilot repository custom instructions: `https://docs.github.com/en/copilot/customizing-copilot/adding-repository-custom-instructions-for-github-copilot`
+- Trae CN docs entry: `https://docs.trae.cn`
+- SkillManager README supported agents snapshot: `https://raw.githubusercontent.com/eatmoreduck/SkillManager/master/README.md`
+- Cline config layout: `https://docs.cline.bot/getting-started/config`
+- Cline skills: `https://docs.cline.bot/customization/skills.md`
+- Cline rules: `https://docs.cline.bot/customization/cline-rules`
+- Kilo Code custom rules: `https://docs.kilo.ai/docs/customize/custom-rules`
+- Kilo Code skills: `https://docs.kilo.ai/docs/customize/skills`
+- Kilo Code agents.md: `https://docs.kilo.ai/docs/customize/agents-md`
 
 ## Canonical Sources
 

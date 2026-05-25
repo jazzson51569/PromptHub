@@ -5,12 +5,13 @@ import { initDatabase } from "../database";
 import type { MCPServerConfig } from "@prompthub/shared/types/skill";
 import {
   getPlatformById,
-  getPlatformGlobalRuleTemplate,
-  getPlatformSkillsTemplate,
   normalizeLegacySkillPathToRootTemplate,
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
-import type { Settings } from "@prompthub/shared/types";
+import type {
+  BuiltinAgentOverrideConfig,
+  CustomAgentConfig,
+} from "@prompthub/shared/types";
 
 export function validateMCPServerConfig(
   config: unknown,
@@ -159,6 +160,158 @@ let _customRootPathsCache: Record<string, string> | null = null;
 let _customRootPathsCacheTs = 0;
 const CUSTOM_PATHS_CACHE_TTL = 5000; // 5 seconds
 
+let _builtinAgentOverridesCache: Record<string, BuiltinAgentOverrideConfig> | null = null;
+let _builtinAgentOverridesCacheTs = 0;
+
+function normalizeBuiltinAgentOverrides(
+  input: unknown,
+): Record<string, BuiltinAgentOverrideConfig> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return {};
+  }
+
+  return Object.entries(input as Record<string, unknown>).reduce<
+    Record<string, BuiltinAgentOverrideConfig>
+  >((acc, [platformId, value]) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return acc;
+    }
+    const record = value as Record<string, unknown>;
+    acc[platformId] = {
+      rootPath:
+        typeof record.rootPath === "string" && record.rootPath.trim().length > 0
+          ? record.rootPath.trim()
+          : undefined,
+      skillsRelativePath:
+        typeof record.skillsRelativePath === "string" &&
+        record.skillsRelativePath.trim().length > 0
+          ? record.skillsRelativePath.trim().replace(/^[\\/]+|[\\/]+$/g, "")
+          : undefined,
+      rulesRelativePath:
+        typeof record.rulesRelativePath === "string" &&
+        record.rulesRelativePath.trim().length > 0
+          ? record.rulesRelativePath.trim().replace(/^[\\/]+|[\\/]+$/g, "")
+          : undefined,
+      agentsRelativePath:
+        typeof record.agentsRelativePath === "string" &&
+        record.agentsRelativePath.trim().length > 0
+          ? record.agentsRelativePath.trim().replace(/^[\\/]+|[\\/]+$/g, "")
+          : undefined,
+      commandsRelativePath:
+        typeof record.commandsRelativePath === "string" &&
+        record.commandsRelativePath.trim().length > 0
+          ? record.commandsRelativePath.trim().replace(/^[\\/]+|[\\/]+$/g, "")
+          : undefined,
+      configRelativePaths: Array.isArray(record.configRelativePaths)
+        ? record.configRelativePaths
+            .filter((entry): entry is string => typeof entry === "string")
+            .map((entry) => entry.trim().replace(/^[\\/]+|[\\/]+$/g, ""))
+            .filter((entry) => entry.length > 0)
+        : undefined,
+    };
+    return acc;
+  }, {});
+}
+
+function joinRootRelativePath(rootDir: string, relativePath: string): string {
+  return path.join(rootDir, ...relativePath.split(/[\\/]+/).filter(Boolean));
+}
+
+function deriveLegacyRootPathMap(
+  overrides: Record<string, BuiltinAgentOverrideConfig>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(overrides).flatMap(([platformId, value]) =>
+      typeof value.rootPath === "string" && value.rootPath.trim().length > 0
+        ? [[platformId, value.rootPath.trim()] as const]
+        : [],
+    ),
+  );
+}
+
+function parseJsonSetting<T>(rawValue: string | undefined, fallback: T): T {
+  if (!rawValue) {
+    return fallback;
+  }
+
+  return JSON.parse(rawValue) as T;
+}
+
+function readBuiltinAgentOverridesFromSettings(): Record<
+  string,
+  BuiltinAgentOverrideConfig
+> {
+  const now = Date.now();
+  if (
+    _builtinAgentOverridesCache &&
+    now - _builtinAgentOverridesCacheTs < CUSTOM_PATHS_CACHE_TTL
+  ) {
+    return _builtinAgentOverridesCache;
+  }
+
+  try {
+    const db = initDatabase();
+    if (!db || typeof db.prepare !== "function") {
+      _builtinAgentOverridesCache = {};
+      _builtinAgentOverridesCacheTs = now;
+      return _builtinAgentOverridesCache;
+    }
+
+    const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+    const overridesRow = stmt.get("builtinAgentOverrides") as
+      | { value: string }
+      | undefined;
+    const rootRow = stmt.get("customPlatformRootPaths") as
+      | { value: string }
+      | undefined;
+    const legacyRow = stmt.get("customSkillPlatformPaths") as
+      | { value: string }
+      | undefined;
+
+    const parsedOverrides = normalizeBuiltinAgentOverrides(
+      parseJsonSetting(overridesRow?.value, {}),
+    );
+    if (Object.keys(parsedOverrides).length > 0) {
+      _builtinAgentOverridesCache = parsedOverrides;
+      _builtinAgentOverridesCacheTs = now;
+      return _builtinAgentOverridesCache;
+    }
+
+    const parsedRootPaths = normalizeBuiltinAgentOverrides(
+      Object.fromEntries(
+        Object.entries(parseJsonSetting<Record<string, string>>(rootRow?.value, {})).map(
+          ([platformId, rootPath]) => [platformId, { rootPath }],
+        ),
+      ),
+    );
+    if (Object.keys(parsedRootPaths).length > 0) {
+      _builtinAgentOverridesCache = parsedRootPaths;
+      _builtinAgentOverridesCacheTs = now;
+      return _builtinAgentOverridesCache;
+    }
+
+    const parsedLegacyPaths = parseJsonSetting<Record<string, string>>(legacyRow?.value, {});
+    _builtinAgentOverridesCache = normalizeBuiltinAgentOverrides(
+      Object.fromEntries(
+        Object.entries(parsedLegacyPaths).map(([platformId, value]) => {
+          const platform = getPlatformById(platformId);
+          if (!platform) {
+            return [platformId, { rootPath: value }];
+          }
+          return [platformId, { rootPath: migrateLegacySkillPathToRootPath(platform, value) }];
+        }),
+      ),
+    );
+    _builtinAgentOverridesCacheTs = now;
+    return _builtinAgentOverridesCache;
+  } catch (error) {
+    console.warn("Failed to read built-in agent overrides:", error);
+    _builtinAgentOverridesCache = {};
+    _builtinAgentOverridesCacheTs = now;
+    return _builtinAgentOverridesCache;
+  }
+}
+
 function readPlatformRootPathsFromSettings(): Record<string, string> {
   const now = Date.now();
   if (
@@ -168,65 +321,8 @@ function readPlatformRootPathsFromSettings(): Record<string, string> {
     return _customRootPathsCache;
   }
   try {
-    const db = initDatabase();
-    if (!db || typeof db.prepare !== "function") {
-      _customRootPathsCache = {};
-      _customRootPathsCacheTs = now;
-      return _customRootPathsCache;
-    }
-    const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
-    const rootRow = stmt.get("customPlatformRootPaths") as
-      | { value: string }
-      | undefined;
-    const legacyRow = stmt.get("customSkillPlatformPaths") as
-      | { value: string }
-      | undefined;
-
-    const parseRecord = (
-      rawValue: string | undefined,
-    ): Record<string, string> | null => {
-      if (!rawValue) {
-        return null;
-      }
-
-      const parsed = JSON.parse(rawValue) as Record<string, unknown>;
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-        return null;
-      }
-
-      return Object.entries(parsed).reduce<Record<string, string>>(
-        (acc, [key, value]) => {
-          if (typeof value === "string") {
-            acc[key] = value;
-          }
-          return acc;
-        },
-        {},
-      );
-    };
-
-    const parsedRootPaths = parseRecord(rootRow?.value);
-    if (parsedRootPaths) {
-      _customRootPathsCache = parsedRootPaths;
-      _customRootPathsCacheTs = now;
-      return _customRootPathsCache;
-    }
-
-    const parsedLegacyPaths = parseRecord(legacyRow?.value);
-    if (!parsedLegacyPaths) {
-      _customRootPathsCache = {};
-      _customRootPathsCacheTs = now;
-      return _customRootPathsCache;
-    }
-
-    _customRootPathsCache = Object.fromEntries(
-      Object.entries(parsedLegacyPaths).map(([platformId, value]) => {
-        const platform = getPlatformById(platformId);
-        if (!platform) {
-          return [platformId, value];
-        }
-        return [platformId, migrateLegacySkillPathToRootPath(platform, value)];
-      }),
+    _customRootPathsCache = deriveLegacyRootPathMap(
+      readBuiltinAgentOverridesFromSettings(),
     );
     _customRootPathsCacheTs = now;
     return _customRootPathsCache;
@@ -238,20 +334,79 @@ function readPlatformRootPathsFromSettings(): Record<string, string> {
   }
 }
 
+export function readCustomAgentsFromSettings(): CustomAgentConfig[] {
+  try {
+    const db = initDatabase();
+    if (!db || typeof db.prepare !== "function") {
+      return [];
+    }
+    const stmt = db.prepare("SELECT value FROM settings WHERE key = ?");
+    const row = stmt.get("customAgents") as { value: string } | undefined;
+    if (!row?.value) {
+      return [];
+    }
+    const parsed = JSON.parse(row.value) as unknown;
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+    return parsed.filter(
+      (entry): entry is CustomAgentConfig =>
+        Boolean(entry) &&
+        typeof entry === "object" &&
+        typeof (entry as CustomAgentConfig).id === "string" &&
+        typeof (entry as CustomAgentConfig).name === "string" &&
+        typeof (entry as CustomAgentConfig).rootPath === "string",
+    );
+  } catch (error) {
+    console.warn("Failed to read custom agents from settings:", error);
+    return [];
+  }
+}
+
+export function getCustomAgentPlatforms(): SkillPlatform[] {
+  return readCustomAgentsFromSettings()
+    .filter((agent) => agent.enabled !== false)
+    .map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      icon: "Bot",
+      rootDir: {
+        darwin: agent.rootPath,
+        win32: agent.rootPath,
+        linux: agent.rootPath,
+      },
+      skillsRelativePath: agent.skillsRelativePath || "skills",
+      globalRuleFile: agent.rulesRelativePath || undefined,
+      configFiles: agent.configRelativePaths || [],
+      isCustom: true,
+    }));
+}
+
 /**
  * Invalidate the cached custom platform paths so the next call reads from DB.
  */
 export function invalidateCustomPathsCache(): void {
   _customRootPathsCache = null;
   _customRootPathsCacheTs = 0;
+  _builtinAgentOverridesCache = null;
+  _builtinAgentOverridesCacheTs = 0;
+}
+
+export function getBuiltinAgentOverride(
+  platformId: string,
+): BuiltinAgentOverrideConfig | undefined {
+  return readBuiltinAgentOverridesFromSettings()[platformId];
 }
 
 export function getPlatformRootDir(
   platform: SkillPlatform,
   overrides?: Record<string, string>,
 ): string {
+  const builtinOverride = getBuiltinAgentOverride(platform.id);
   const overridePath =
-    overrides?.[platform.id] ?? readPlatformRootPathsFromSettings()[platform.id];
+    overrides?.[platform.id] ??
+    builtinOverride?.rootPath ??
+    readPlatformRootPathsFromSettings()[platform.id];
 
   if (typeof overridePath === "string" && overridePath.trim()) {
     return resolvePlatformPath(overridePath.trim());
@@ -266,41 +421,26 @@ export function getPlatformSkillsDir(
   platform: SkillPlatform,
   overrides?: Record<string, string>,
 ): string {
-  const osKey = process.platform as "darwin" | "win32" | "linux";
   const rootDir = getPlatformRootDir(platform, overrides);
-  const template = getPlatformSkillsTemplate(platform, osKey);
-  const defaultRootDir = resolvePlatformPath(platform.rootDir[osKey] || platform.rootDir.linux);
-  const normalizedDefaultSkillsDir = resolvePlatformPath(template);
+  const relativePath =
+    getBuiltinAgentOverride(platform.id)?.skillsRelativePath || platform.skillsRelativePath;
 
-  if (rootDir === defaultRootDir) {
-    return normalizedDefaultSkillsDir;
-  }
-
-  return path.join(rootDir, ...platform.skillsRelativePath.split(/[\\/]+/).filter(Boolean));
+  return joinRootRelativePath(rootDir, relativePath);
 }
 
 export function getPlatformGlobalRulePath(
   platform: SkillPlatform,
   overrides?: Record<string, string>,
 ): string | null {
-  if (!platform.globalRuleFile) {
+  const relativePath =
+    getBuiltinAgentOverride(platform.id)?.rulesRelativePath || platform.globalRuleFile;
+
+  if (!relativePath) {
     return null;
   }
 
-  const osKey = process.platform as "darwin" | "win32" | "linux";
   const rootDir = getPlatformRootDir(platform, overrides);
-  const template = getPlatformGlobalRuleTemplate(platform, osKey);
-  const defaultRootDir = resolvePlatformPath(platform.rootDir[osKey] || platform.rootDir.linux);
-
-  if (!template) {
-    return null;
-  }
-
-  if (rootDir === defaultRootDir) {
-    return resolvePlatformPath(template);
-  }
-
-  return path.join(rootDir, ...platform.globalRuleFile.split(/[\\/]+/).filter(Boolean));
+  return joinRootRelativePath(rootDir, relativePath);
 }
 
 export function migrateLegacySkillPathToRootPath(

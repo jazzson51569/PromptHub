@@ -18,6 +18,7 @@ export interface SkillPlatform {
   skillsRelativePath: string;
   globalRuleFile?: string;
   configFiles?: string[];
+  isCustom?: boolean;
 }
 
 export type SkillPlatformOsKey = "darwin" | "win32" | "linux";
@@ -98,10 +99,17 @@ export function normalizeLegacySkillPathToRootTemplate(
 export const DEFAULT_SKILL_PLATFORM_ORDER = [
   "claude",
   "codex",
+  "gemini",
   "opencode",
+  "cline",
+  "cursor",
+  "windsurf",
+  "kiro",
+  "roo",
+  "trae",
+  "trae-cn",
   "openclaw",
   "hermes",
-  "cursor",
 ] as const;
 
 /**
@@ -201,6 +209,17 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     skillsRelativePath: "skills",
   },
   {
+    id: "trae-cn",
+    name: "Trae CN",
+    icon: "Zap",
+    rootDir: {
+      darwin: "~/.trae-cn",
+      win32: "%USERPROFILE%\\.trae-cn",
+      linux: "~/.trae-cn",
+    },
+    skillsRelativePath: "skills",
+  },
+  {
     id: "opencode",
     name: "OpenCode",
     icon: "Terminal",
@@ -212,6 +231,22 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     skillsRelativePath: "skills",
     globalRuleFile: "AGENTS.md",
     configFiles: ["opencode.json"],
+  },
+  {
+    id: "cline",
+    name: "Cline",
+    icon: "Terminal",
+    rootDir: {
+      darwin: "~/.cline",
+      win32: "%USERPROFILE%\\.cline",
+      linux: "~/.cline",
+    },
+    skillsRelativePath: "skills",
+    configFiles: [
+      "data/settings/global-settings.json",
+      "data/settings/providers.json",
+      "data/settings/cline_mcp_settings.json",
+    ],
   },
   {
     id: "codex",

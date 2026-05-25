@@ -15,17 +15,23 @@ import {
   XIcon,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import type { CustomAgentConfig } from "@prompthub/shared/types";
+import type {
+  AgentAssetConfig,
+  BuiltinAgentOverrideConfig,
+  CustomAgentConfig,
+} from "@prompthub/shared/types";
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 
 import {
   SKILL_PLATFORMS,
-  getPlatformGlobalRuleTemplate,
   getPlatformRootTemplate,
 } from "@prompthub/shared/constants/platforms";
 import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
-import { buildAgentRootAssetPreview } from "../../services/agent-root-paths";
+import {
+  buildAgentRootAssetPreview,
+  getEffectiveBuiltinAgentConfig,
+} from "../../services/agent-root-paths";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PlatformIcon } from "../ui/PlatformIcon";
 import { SettingSection, ToggleSwitch } from "./shared";
@@ -41,6 +47,12 @@ interface ManagedAgentEntry {
   iconPlatformId?: string;
   platform?: SkillPlatform;
   customAgent?: CustomAgentConfig;
+  builtinOverride?: BuiltinAgentOverrideConfig;
+  skillsRelativePath?: string;
+  rulesRelativePath?: string;
+  agentsRelativePath?: string;
+  commandsRelativePath?: string;
+  configRelativePaths?: string[];
 }
 
 function getCurrentPlatformKey(): "darwin" | "win32" | "linux" {
@@ -48,17 +60,6 @@ function getCurrentPlatformKey(): "darwin" | "win32" | "linux" {
   if (platform.includes("win")) return "win32";
   if (platform.includes("mac")) return "darwin";
   return "linux";
-}
-
-function joinResolvedPlatformPath(rootPath: string, relativePath: string): string {
-  const normalizedRoot = rootPath.trim().replace(/[\\/]+$/, "");
-  const segments = relativePath.split(/[\\/]+/).filter(Boolean);
-  if (segments.length === 0) {
-    return normalizedRoot;
-  }
-
-  const separator = normalizedRoot.includes("\\") ? "\\" : "/";
-  return `${normalizedRoot}${separator}${segments.join(separator)}`;
 }
 
 function useOrderedPlatforms() {
@@ -78,16 +79,28 @@ function useManagedAgentEntries() {
   const currentPlatformKey = getCurrentPlatformKey();
 
   return useMemo<ManagedAgentEntry[]>(() => {
-    const builtinEntries: ManagedAgentEntry[] = orderedPlatforms.map((platform) => ({
-      id: platform.id,
-      name: platform.name,
-      rootPath:
-        settings.customPlatformRootPaths[platform.id] ||
+    const builtinEntries: ManagedAgentEntry[] = orderedPlatforms.map((platform) => {
+      const effectiveConfig = getEffectiveBuiltinAgentConfig(
+        platform,
         getPlatformRootTemplate(platform, currentPlatformKey),
-      kind: "builtin",
-      iconPlatformId: platform.id,
-      platform,
-    }));
+        settings.builtinAgentOverrides[platform.id],
+      );
+
+      return {
+        id: platform.id,
+        name: platform.name,
+        rootPath: effectiveConfig.rootPath || "",
+        kind: "builtin",
+        iconPlatformId: platform.id,
+        platform,
+        builtinOverride: settings.builtinAgentOverrides[platform.id],
+        skillsRelativePath: effectiveConfig.skillsRelativePath,
+        rulesRelativePath: effectiveConfig.rulesRelativePath,
+        agentsRelativePath: effectiveConfig.agentsRelativePath,
+        commandsRelativePath: effectiveConfig.commandsRelativePath,
+        configRelativePaths: effectiveConfig.configRelativePaths,
+      };
+    });
 
     const customEntries: ManagedAgentEntry[] = settings.customAgents.map((agent) => ({
       id: agent.id,
@@ -114,7 +127,7 @@ function useManagedAgentEntries() {
     currentPlatformKey,
     orderedPlatforms,
     settings.customAgents,
-    settings.customPlatformRootPaths,
+    settings.builtinAgentOverrides,
     settings.skillPlatformOrder,
   ]);
 }
@@ -123,20 +136,26 @@ function reorderPlatformIds(
   currentOrder: string[],
   sourceId: string,
   targetId: string,
+  position: "before" | "after" = "before",
 ): string[] | null {
   if (sourceId === targetId) {
     return null;
   }
 
-  const sourceIndex = currentOrder.indexOf(sourceId);
-  const targetIndex = currentOrder.indexOf(targetId);
-  if (sourceIndex === -1 || targetIndex === -1) {
+  const filteredOrder = currentOrder.filter((id) => id !== sourceId);
+  const targetIndex = filteredOrder.indexOf(targetId);
+  if (!currentOrder.includes(sourceId) || targetIndex === -1) {
     return null;
   }
 
-  const nextOrder = [...currentOrder];
-  const [moved] = nextOrder.splice(sourceIndex, 1);
-  nextOrder.splice(targetIndex, 0, moved);
+  const nextOrder = [...filteredOrder];
+  const insertionIndex = position === "after" ? targetIndex + 1 : targetIndex;
+  nextOrder.splice(insertionIndex, 0, sourceId);
+
+  if (nextOrder.every((id, index) => id === currentOrder[index])) {
+    return null;
+  }
+
   return nextOrder;
 }
 
@@ -158,12 +177,22 @@ export function SkillSettings() {
   const [editingAgentCommandsPath, setEditingAgentCommandsPath] = useState("commands");
   const [editingAgentConfigPaths, setEditingAgentConfigPaths] = useState("");
   const [editingAgentEnabled, setEditingAgentEnabled] = useState(true);
+  const [editingBuiltinAgentId, setEditingBuiltinAgentId] = useState<string | null>(
+    null,
+  );
+  const [editingBuiltinRootPath, setEditingBuiltinRootPath] = useState("");
+  const [editingBuiltinSkillsPath, setEditingBuiltinSkillsPath] = useState("");
+  const [editingBuiltinRulesPath, setEditingBuiltinRulesPath] = useState("");
+  const [editingBuiltinAgentsPath, setEditingBuiltinAgentsPath] = useState("");
+  const [editingBuiltinCommandsPath, setEditingBuiltinCommandsPath] = useState("");
+  const [editingBuiltinConfigPaths, setEditingBuiltinConfigPaths] = useState("");
   const [draggingPlatformId, setDraggingPlatformId] = useState<string | null>(
     null,
   );
-  const [dropTargetPlatformId, setDropTargetPlatformId] = useState<string | null>(
-    null,
-  );
+  const [dropIndicator, setDropIndicator] = useState<{
+    platformId: string;
+    position: "before" | "after";
+  } | null>(null);
   const [isGithubTokenVisible, setIsGithubTokenVisible] = useState(false);
   const [pendingDeleteAgent, setPendingDeleteAgent] = useState<CustomAgentConfig | null>(
     null,
@@ -188,11 +217,16 @@ export function SkillSettings() {
     settings.setSkillPlatformOrder(nextOrder);
   };
 
-  const applyDraggedPlatformOrder = (sourceId: string, targetId: string) => {
+  const applyDraggedPlatformOrder = (
+    sourceId: string,
+    targetId: string,
+    position: "before" | "after",
+  ) => {
     const nextOrder = reorderPlatformIds(
       managedAgentEntries.map((platform) => platform.id),
       sourceId,
       targetId,
+      position,
     );
     if (!nextOrder) {
       return;
@@ -203,7 +237,7 @@ export function SkillSettings() {
   const handleDragStart =
     (platformId: string) => (event: DragEvent<HTMLDivElement>) => {
       setDraggingPlatformId(platformId);
-      setDropTargetPlatformId(platformId);
+      setDropIndicator(null);
       event.dataTransfer.effectAllowed = "move";
       event.dataTransfer.setData("text/plain", platformId);
     };
@@ -215,7 +249,10 @@ export function SkillSettings() {
       }
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
-      setDropTargetPlatformId(platformId);
+      const rect = event.currentTarget.getBoundingClientRect();
+      const midpointY = rect.top + rect.height / 2;
+      const position = rect.height > 0 && event.clientY > midpointY ? "after" : "before";
+      setDropIndicator({ platformId, position });
     };
 
   const handleDrop =
@@ -223,16 +260,20 @@ export function SkillSettings() {
       event.preventDefault();
       const sourceId =
         event.dataTransfer.getData("text/plain") || draggingPlatformId;
+      const position =
+        dropIndicator?.platformId === platformId
+          ? dropIndicator.position
+          : "before";
       if (sourceId) {
-        applyDraggedPlatformOrder(sourceId, platformId);
+        applyDraggedPlatformOrder(sourceId, platformId, position);
       }
       setDraggingPlatformId(null);
-      setDropTargetPlatformId(null);
+      setDropIndicator(null);
     };
 
   const handleDragEnd = () => {
     setDraggingPlatformId(null);
-    setDropTargetPlatformId(null);
+    setDropIndicator(null);
   };
 
   const handleAddCustomAgent = () => {
@@ -264,6 +305,46 @@ export function SkillSettings() {
     if (selectedPath) {
       setEditingAgentRootPath(selectedPath);
     }
+  };
+
+  const startBuiltinEdit = (platformId: string, config: AgentAssetConfig) => {
+    setEditingBuiltinAgentId(platformId);
+    setEditingBuiltinRootPath(config.rootPath || "");
+    setEditingBuiltinSkillsPath(config.skillsRelativePath || "");
+    setEditingBuiltinRulesPath(config.rulesRelativePath || "");
+    setEditingBuiltinAgentsPath(config.agentsRelativePath || "");
+    setEditingBuiltinCommandsPath(config.commandsRelativePath || "");
+    setEditingBuiltinConfigPaths((config.configRelativePaths || []).join(", "));
+  };
+
+  const cancelBuiltinEdit = () => {
+    setEditingBuiltinAgentId(null);
+    setEditingBuiltinRootPath("");
+    setEditingBuiltinSkillsPath("");
+    setEditingBuiltinRulesPath("");
+    setEditingBuiltinAgentsPath("");
+    setEditingBuiltinCommandsPath("");
+    setEditingBuiltinConfigPaths("");
+  };
+
+  const resetBuiltinEditForm = (platformId: string, platform: SkillPlatform, defaultRootPath: string) => {
+    const defaultConfig = getEffectiveBuiltinAgentConfig(platform, defaultRootPath, undefined);
+    startBuiltinEdit(platformId, defaultConfig);
+  };
+
+  const saveBuiltinEdit = (platformId: string) => {
+    settings.updateBuiltinAgentOverride(platformId, {
+      rootPath: editingBuiltinRootPath,
+      skillsRelativePath: editingBuiltinSkillsPath,
+      rulesRelativePath: editingBuiltinRulesPath,
+      agentsRelativePath: editingBuiltinAgentsPath,
+      commandsRelativePath: editingBuiltinCommandsPath,
+      configRelativePaths: editingBuiltinConfigPaths
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    });
+    cancelBuiltinEdit();
   };
 
   return (
@@ -421,19 +502,31 @@ export function SkillSettings() {
                 key={platform.id}
                 role="listitem"
                 data-platform-id={platform.id}
+                data-drop-position={
+                  dropIndicator?.platformId === platform.id
+                    ? dropIndicator.position
+                    : undefined
+                }
                 draggable
                 onDragStart={handleDragStart(platform.id)}
                 onDragOver={handleDragOver(platform.id)}
                 onDrop={handleDrop(platform.id)}
                 onDragEnd={handleDragEnd}
-                className={`flex items-center justify-between gap-3 rounded-xl border px-3 py-2 app-wallpaper-surface-strong transition-colors cursor-grab active:cursor-grabbing ${
+                className={`relative flex items-center justify-between gap-3 rounded-xl border px-3 py-2 app-wallpaper-surface-strong transition-colors cursor-grab active:cursor-grabbing ${
                   draggingPlatformId === platform.id
                     ? "border-primary/40 opacity-60"
-                    : dropTargetPlatformId === platform.id
+                    : dropIndicator?.platformId === platform.id
                       ? "border-primary/60 ring-1 ring-primary/30"
                       : "border-border/60"
                 }`}
               >
+                {dropIndicator?.platformId === platform.id ? (
+                  <div
+                    className={`pointer-events-none absolute left-3 right-3 h-0.5 rounded-full bg-primary shadow-[0_0_0_3px_rgba(59,130,246,0.14)] ${
+                      dropIndicator.position === "before" ? "top-0" : "bottom-0"
+                    }`}
+                  />
+                ) : null}
                 <div className="flex min-w-0 items-center gap-3">
                   <GripVerticalIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <PlatformIcon
@@ -504,49 +597,106 @@ export function SkillSettings() {
       </SettingSection>
 
       <SettingSection
-        title={t("settings.platformRootPaths", "Platform Root Directories")}
+        title={t("settings.agentConfigurations", "Agent Configurations")}
       >
         <div className="p-4 space-y-3">
           <p className="text-xs text-muted-foreground">
             {t(
-              "settings.platformRootPathsDesc",
-              "Override the root directory for each AI tool platform. PromptHub will derive internal paths like skills and global rules from this root.",
+              "settings.agentConfigurationsDesc",
+              "Manage built-in and custom agent roots plus derived asset paths in one place. Skills, Rules, Agents, Commands, and config files all derive from these settings.",
             )}
           </p>
           <div className="rounded-lg border border-border overflow-hidden">
             {orderedPlatforms.map((platform) => {
-              const overridePath = settings.customPlatformRootPaths[platform.id] || "";
               const defaultRootPath = getPlatformRootTemplate(
                 platform,
                 currentPlatformKey,
               );
-              const effectiveRootPath = overridePath || defaultRootPath;
-              const derivedSkillsPath = joinResolvedPlatformPath(
-                effectiveRootPath,
-                platform.skillsRelativePath,
-              );
-              const defaultRulePath = getPlatformGlobalRuleTemplate(
+              const override = settings.builtinAgentOverrides[platform.id] || {};
+              const isEditingBuiltin = editingBuiltinAgentId === platform.id;
+              const activeOverride = isEditingBuiltin
+                ? {
+                    rootPath: editingBuiltinRootPath,
+                    skillsRelativePath: editingBuiltinSkillsPath,
+                    rulesRelativePath: editingBuiltinRulesPath,
+                    agentsRelativePath: editingBuiltinAgentsPath,
+                    commandsRelativePath: editingBuiltinCommandsPath,
+                    configRelativePaths: editingBuiltinConfigPaths
+                      .split(",")
+                      .map((entry) => entry.trim())
+                      .filter((entry) => entry.length > 0),
+                  }
+                : override;
+              const effectiveConfig = getEffectiveBuiltinAgentConfig(
                 platform,
-                currentPlatformKey,
+                defaultRootPath,
+                activeOverride,
               );
-              const derivedRulePath =
-                platform.globalRuleFile && defaultRulePath
-                  ? joinResolvedPlatformPath(
-                      effectiveRootPath,
-                      platform.globalRuleFile,
-                    )
-                  : null;
+              const preview = buildAgentRootAssetPreview({
+                rootPath: effectiveConfig.rootPath || "",
+                skillsRelativePath: effectiveConfig.skillsRelativePath,
+                rulesRelativePath: effectiveConfig.rulesRelativePath,
+                agentsRelativePath: effectiveConfig.agentsRelativePath,
+                commandsRelativePath: effectiveConfig.commandsRelativePath,
+                configRelativePaths: effectiveConfig.configRelativePaths,
+              });
 
               return (
                 <div
                   key={platform.id}
+                  data-platform-config-id={platform.id}
                   className="px-3 py-3 border-b border-border/70 last:border-0 space-y-3"
                 >
-                  <div className="flex items-center gap-2">
-                    <PlatformIcon platformId={platform.id} size={16} />
-                    <span className="text-sm font-medium text-foreground">
-                      {platform.name}
-                    </span>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <PlatformIcon platformId={platform.id} size={16} />
+                      <span className="text-sm font-medium text-foreground">
+                        {platform.name}
+                      </span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {t("settings.builtinAgentBadge", "Built-in")}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isEditingBuiltin ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => saveBuiltinEdit(platform.id)}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-white transition-colors hover:bg-primary/90"
+                          >
+                            <SaveIcon className="h-3.5 w-3.5" />
+                            {t("common.save", "Save")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={cancelBuiltinEdit}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:bg-accent"
+                          >
+                            <XIcon className="h-3.5 w-3.5" />
+                            {t("common.cancel", "Cancel")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => resetBuiltinEditForm(platform.id, platform, defaultRootPath)}
+                            disabled={Object.keys(override).length === 0}
+                            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+                          >
+                            <RotateCcwIcon className="h-3.5 w-3.5" />
+                            {t("settings.resetPlatformRootPath", "Reset")}
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => startBuiltinEdit(platform.id, effectiveConfig)}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-foreground transition-colors hover:bg-accent"
+                        >
+                          <PencilIcon className="h-3.5 w-3.5" />
+                          {t("common.edit", "Edit")}
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="text-[11px] text-muted-foreground">
                     {t("settings.defaultPathLabel", "Default path")}:
@@ -558,56 +708,134 @@ export function SkillSettings() {
                     <div>
                       {t("settings.platformDerivedSkillPath", "Derived skills path")}
                       :
-                      <span className="ml-1 font-mono">{derivedSkillsPath}</span>
+                      <span className="ml-1 font-mono">{preview.skillScanPaths.join(", ")}</span>
                     </div>
-                    {derivedRulePath ? (
+                    {preview.ruleCandidates.length > 0 ? (
                       <div>
                         {t("settings.platformDerivedRulesPath", "Derived rules path")}
                         :
-                        <span className="ml-1 font-mono">{derivedRulePath}</span>
+                        <span className="ml-1 font-mono">{preview.ruleCandidates.join(", ")}</span>
                       </div>
                     ) : null}
-                    {platform.configFiles?.length ? (
+                    {preview.configCandidates.length > 0 ? (
                       <div>
                         {t("settings.platformDerivedConfigPath", "Derived config files")}
                         :
                         <span className="ml-1 font-mono">
-                          {platform.configFiles
-                            .map((configFile) =>
-                              joinResolvedPlatformPath(effectiveRootPath, configFile),
-                            )
-                            .join(", ")}
+                          {preview.configCandidates.join(", ")}
                         </span>
                       </div>
                     ) : null}
+                    <div>
+                      {t("settings.agentDerivedAgentDirs", "Derived agent directories")}
+                      :
+                      <span className="ml-1 font-mono">{preview.agentDirectories.join(", ")}</span>
+                    </div>
+                    <div>
+                      {t("settings.agentDerivedCommandDirs", "Derived command directories")}
+                      :
+                      <span className="ml-1 font-mono">{preview.commandDirectories.join(", ")}</span>
+                    </div>
                     <div className="text-[10px] text-muted-foreground/80">
                       {t(
-                        "settings.platformDerivedPathHint",
-                        "Skills, Rules, and related config files are derived from the platform root directory.",
+                        "settings.agentConfigurationsHint",
+                        "PromptHub treats each built-in platform as an agent config. Override any relative path only when the tool uses a non-standard layout.",
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={overridePath}
-                      onChange={(e) =>
-                        settings.setCustomPlatformRootPath(platform.id, e.target.value)
-                      }
-                      placeholder={t(
-                        "settings.platformRootPathPlaceholder",
-                        "Leave empty to use the default root, e.g. ~/.trae-cn",
-                      )}
-                      className="flex-1 h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
-                    />
-                    <button
-                      onClick={() => settings.resetCustomPlatformRootPath(platform.id)}
-                      disabled={!overridePath}
-                      className="h-9 px-3 rounded-lg border border-border text-sm text-muted-foreground hover:border-primary/30 hover:text-foreground disabled:opacity-50 disabled:hover:border-border disabled:hover:text-muted-foreground transition-colors"
-                    >
-                      {t("settings.resetPlatformRootPath", "Reset")}
-                    </button>
-                  </div>
+                  {isEditingBuiltin ? (
+                    <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/20 p-4">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={editingBuiltinRootPath}
+                          onChange={(e) => setEditingBuiltinRootPath(e.target.value)}
+                          placeholder={t(
+                            "settings.platformRootPathPlaceholder",
+                            "Leave empty to use the default root, e.g. ~/.trae-cn",
+                          )}
+                          className="flex-1 h-9 px-3 rounded-lg bg-muted border-0 text-sm placeholder:text-muted-foreground/50"
+                        />
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        <div className="grid gap-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            {t("settings.agentSkillsLabel", "Skills")}
+                          </label>
+                          <input
+                            type="text"
+                            value={editingBuiltinSkillsPath}
+                            onChange={(e) => setEditingBuiltinSkillsPath(e.target.value)}
+                            placeholder={t(
+                              "settings.customAgentSkillsPathPlaceholder",
+                              "skills relative path (optional)",
+                            )}
+                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            {t("settings.agentRulesLabel", "Rules")}
+                          </label>
+                          <input
+                            type="text"
+                            value={editingBuiltinRulesPath}
+                            onChange={(e) => setEditingBuiltinRulesPath(e.target.value)}
+                            placeholder={t(
+                              "settings.customAgentRulesPathPlaceholder",
+                              "rules file path (optional)",
+                            )}
+                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            {t("settings.agentAgentsLabel", "Agents")}
+                          </label>
+                          <input
+                            type="text"
+                            value={editingBuiltinAgentsPath}
+                            onChange={(e) => setEditingBuiltinAgentsPath(e.target.value)}
+                            placeholder={t(
+                              "settings.customAgentAgentsPathPlaceholder",
+                              "agents relative path",
+                            )}
+                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                          />
+                        </div>
+                        <div className="grid gap-1">
+                          <label className="text-xs font-medium text-muted-foreground">
+                            {t("settings.agentCommandsLabel", "Commands")}
+                          </label>
+                          <input
+                            type="text"
+                            value={editingBuiltinCommandsPath}
+                            onChange={(e) => setEditingBuiltinCommandsPath(e.target.value)}
+                            placeholder={t(
+                              "settings.customAgentCommandsPathPlaceholder",
+                              "commands relative path",
+                            )}
+                            className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-1">
+                        <label className="text-xs font-medium text-muted-foreground">
+                          {t("settings.agentConfigLabel", "Config")}
+                        </label>
+                        <input
+                          type="text"
+                          value={editingBuiltinConfigPaths}
+                          onChange={(e) => setEditingBuiltinConfigPaths(e.target.value)}
+                          placeholder={t(
+                            "settings.customAgentConfigPathsPlaceholder",
+                            "config files, comma separated",
+                          )}
+                          className="h-9 w-full rounded-md bg-muted px-3 text-sm font-mono"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}
@@ -868,7 +1096,7 @@ export function SkillSettings() {
                           <div className="grid gap-3">
                             <div className="grid gap-1">
                               <label className="text-xs font-medium text-muted-foreground">
-                                Skills
+                                {t("settings.agentSkillsLabel", "Skills")}
                               </label>
                               <input
                                 type="text"
@@ -885,7 +1113,7 @@ export function SkillSettings() {
                             </div>
                             <div className="grid gap-1">
                               <label className="text-xs font-medium text-muted-foreground">
-                                Rules
+                                {t("settings.agentRulesLabel", "Rules")}
                               </label>
                               <input
                                 type="text"
@@ -902,7 +1130,7 @@ export function SkillSettings() {
                             </div>
                             <div className="grid gap-1">
                               <label className="text-xs font-medium text-muted-foreground">
-                                Agents
+                                {t("settings.agentAgentsLabel", "Agents")}
                               </label>
                               <input
                                 type="text"
@@ -919,7 +1147,7 @@ export function SkillSettings() {
                             </div>
                             <div className="grid gap-1">
                               <label className="text-xs font-medium text-muted-foreground">
-                                Commands
+                                {t("settings.agentCommandsLabel", "Commands")}
                               </label>
                               <input
                                 type="text"
@@ -936,7 +1164,7 @@ export function SkillSettings() {
                             </div>
                             <div className="grid gap-1">
                               <label className="text-xs font-medium text-muted-foreground">
-                                Config
+                                {t("settings.agentConfigLabel", "Config")}
                               </label>
                               <input
                                 type="text"

@@ -323,6 +323,117 @@ describe("rules workspace storage", () => {
     expect(claude?.path).toContain(".claude-custom/CLAUDE.md");
   });
 
+  it("supports custom agent global rule files", async () => {
+    const homeDir = path.join(tempDir, "home");
+    const customRoot = path.join(homeDir, ".agents");
+    const customRulePath = path.join(customRoot, "AGENTS.md");
+    fs.mkdirSync(customRoot, { recursive: true });
+    fs.writeFileSync(customRulePath, "# Team agent rule", "utf8");
+
+    const service = createRulesWorkspaceService({
+      getRulesDir,
+      createRuleDb: () => new RuleDB(initDatabase()),
+      getPlatformGlobalRulePath: (platform) => {
+        if (platform.id === "claude") {
+          return path.join(homeDir, ".claude", "CLAUDE.md");
+        }
+        return path.join(homeDir, platform.id, "AGENTS.md");
+      },
+      getPlatformRootDir: (platform) => {
+        if (platform.id === "claude") {
+          return path.join(homeDir, ".claude");
+        }
+        return path.join(homeDir, platform.id);
+      },
+      getExtraGlobalRuleTemplates: () => [
+        {
+          id: "custom:team-agents",
+          platformId: "custom:team-agents",
+          platformName: "Team Agents",
+          platformIcon: "Bot",
+          platformDescription: "Custom team agent rules",
+          name: "AGENTS.md",
+          description: "Global rules for Team Agents.",
+          group: "assistant",
+        },
+      ],
+      getExtraGlobalRuleTargetPath: () => customRulePath,
+    });
+
+    const descriptors = await service.scanRuleDescriptors();
+    const customDescriptor = descriptors.find(
+      (descriptor) => descriptor.id === "custom:team-agents",
+    );
+
+    expect(customDescriptor).toEqual(
+      expect.objectContaining({
+        platformName: "Team Agents",
+        path: customRulePath,
+        exists: true,
+      }),
+    );
+
+    const content = await service.readRuleContent("custom:team-agents");
+    expect(content.content).toContain("Team agent rule");
+
+    const updated = await service.saveRuleContent(
+      "custom:team-agents",
+      "# Updated team agent rule",
+    );
+    expect(updated.content).toContain("Updated team agent rule");
+    expect(fs.readFileSync(customRulePath, "utf8")).toContain(
+      "Updated team agent rule",
+    );
+  });
+
+  it("drops cached custom rule descriptors when the custom agent is no longer configured", async () => {
+    const homeDir = path.join(tempDir, "home");
+    const customRoot = path.join(homeDir, ".agents");
+    const customRulePath = path.join(customRoot, "AGENTS.md");
+    fs.mkdirSync(customRoot, { recursive: true });
+    fs.writeFileSync(customRulePath, "# Team agent rule", "utf8");
+
+    const createService = (includeCustom: boolean) =>
+      createRulesWorkspaceService({
+        getRulesDir,
+        createRuleDb: () => new RuleDB(initDatabase()),
+        getPlatformGlobalRulePath: (platform) => {
+          if (platform.id === "claude") {
+            return path.join(homeDir, ".claude", "CLAUDE.md");
+          }
+          return path.join(homeDir, platform.id, "AGENTS.md");
+        },
+        getPlatformRootDir: (platform) => {
+          if (platform.id === "claude") {
+            return path.join(homeDir, ".claude");
+          }
+          return path.join(homeDir, platform.id);
+        },
+        getExtraGlobalRuleTemplates: () =>
+          includeCustom
+            ? [
+                {
+                  id: "custom:team-agents",
+                  platformId: "custom:team-agents",
+                  platformName: "Team Agents",
+                  platformIcon: "Bot",
+                  platformDescription: "Custom team agent rules",
+                  name: "AGENTS.md",
+                  description: "Global rules for Team Agents.",
+                  group: "assistant",
+                },
+              ]
+            : [],
+        getExtraGlobalRuleTargetPath: () => customRulePath,
+      });
+
+    await createService(true).scanRuleDescriptors();
+
+    const cached = await createService(false).listCachedRuleDescriptors();
+
+    expect(cached.find((descriptor) => descriptor.id === "custom:team-agents")).toBeUndefined();
+  });
+
   it("skips missing version files and repairs the index instead of crashing", async () => {
     const projectRoot = path.join(tempDir, "docs-site");
     fs.mkdirSync(projectRoot, { recursive: true });

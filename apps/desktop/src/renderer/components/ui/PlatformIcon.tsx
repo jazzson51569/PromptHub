@@ -20,6 +20,7 @@ import windsurfIcon from "../../assets/platforms/windsurf.png";
 import kiroIcon from "../../assets/platforms/kiro.png";
 import geminiIcon from "../../assets/platforms/gemini.png";
 import antigravityIcon from "../../assets/platforms/antigravity.svg";
+import clineIcon from "../../assets/platforms/cline.svg";
 import traeIcon from "../../assets/platforms/trae.png";
 import opencodeIcon from "../../assets/platforms/opencode.png";
 import codexIcon from "../../assets/platforms/codex.png";
@@ -44,7 +45,9 @@ const PLATFORM_ICONS: Record<string, PlatformIconSource> = {
   kiro: kiroIcon,
   gemini: geminiIcon,
   antigravity: antigravityIcon,
+  cline: clineIcon,
   trae: traeIcon,
+  "trae-cn": traeIcon,
   opencode: opencodeIcon,
   codex: codexIcon,
   roo: rooIcon,
@@ -70,7 +73,9 @@ const FALLBACK_ICONS: Record<string, React.ReactNode> = {
   gemini: <SparklesIcon />,
   antigravity: <SparklesIcon />,
   trae: <ZapIcon />,
+  "trae-cn": <ZapIcon />,
   opencode: <TerminalIcon />,
+  cline: <TerminalIcon />,
   codex: <TerminalIcon />,
   roo: <BotIcon />,
   amp: <ZapIcon />,
