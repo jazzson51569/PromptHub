@@ -57,8 +57,8 @@
 
 ## C6 — 同步稳定文档
 
-- [x] 新建 `spec/architecture/desktop-frontend-animation.md`（token 取值、意图分类表、禁用清单、缺失补齐清单、reduced-motion 策略）
-- [x] `spec/domains/desktop/spec.md`：加章节"Renderer Motion System"，固化 token 必须存在、必须支持 `motionPreference`、必须尊重 `prefers-reduced-motion`
+- [x] 新建 `spec/knowledge/structure/desktop-frontend-animation.md`（token 取值、意图分类表、禁用清单、缺失补齐清单、reduced-motion 策略）
+- [x] `spec/knowledge/behavior/desktop.md`：加章节"Renderer Motion System"，固化 token 必须存在、必须支持 `motionPreference`、必须尊重 `prefers-reduced-motion`
 - [x] 更新 `implementation.md`，记录每个 commit 的实测数据与偏差
 - [x] 在 follow-ups 中记录"未做的 expressive 档"等延后项
 

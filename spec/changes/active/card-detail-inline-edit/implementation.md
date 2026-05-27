@@ -27,7 +27,7 @@ Added a lightweight inline edit flow to the desktop card-view detail panel so us
 ## Synced Docs
 
 - Synced the active change records under `spec/changes/active/card-detail-inline-edit/`.
-- Synced durable desktop behavior into `spec/domains/desktop/spec.md`.
+- Synced durable desktop behavior into `spec/knowledge/behavior/desktop.md`.
 
 ## Follow-Ups
 

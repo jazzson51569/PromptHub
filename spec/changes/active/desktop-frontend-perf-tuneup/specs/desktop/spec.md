@@ -1,6 +1,6 @@
 # Delta Spec
 
-本 delta 描述桌面端 renderer 在性能调优落地后的可观察行为，作为 `spec/domains/desktop/` 的增量。这不是新增功能，而是把"足够快"的标准与具体保障写成可验证的契约。
+本 delta 描述桌面端 renderer 在性能调优落地后的可观察行为，作为 `spec/knowledge/behavior/desktop.md` 的增量。这不是新增功能，而是把"足够快"的标准与具体保障写成可验证的契约。
 
 ## Added
 

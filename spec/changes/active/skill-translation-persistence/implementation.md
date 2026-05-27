@@ -13,7 +13,7 @@
 - 更新 `apps/desktop/src/renderer/components/skill/SkillPreviewPane.tsx`，预览渲染统一剥离当前文档 frontmatter 后展示正文，stale 且当前未展示译文时显示轻量提醒 badge。
 - 收紧 `apps/desktop/src/renderer/stores/skill.store.ts` 的翻译 prompt，要求返回合法完整 `SKILL.md`：frontmatter 保持 YAML 合法，immersive 模式仅在正文交错插入 `<t>...</t>`。
 - 更新 `apps/desktop/src/main/services/skill-installer-platform.ts`，将平台 symlink 安装从“整个技能目录 symlink”改为“平台目录内仅 symlink canonical `SKILL.md` 文件”，避免 `.prompthub/` sidecar 暴露到平台技能目录。
-- 为新增文案补齐 7 个 locale，并把稳定约束同步回 `spec/domains/skills/spec.md`。
+- 为新增文案补齐 7 个 locale，并把稳定约束同步回 `spec/knowledge/behavior/skills.md`。
 
 ## Verification
 
@@ -26,7 +26,7 @@
 - `spec/changes/active/skill-translation-persistence/proposal.md`
 - `spec/changes/active/skill-translation-persistence/design.md`
 - `spec/changes/active/skill-translation-persistence/specs/skills/spec.md`
-- `spec/domains/skills/spec.md`
+- `spec/knowledge/behavior/skills.md`
 
 ## Follow-ups
 

@@ -25,7 +25,7 @@
   - **新增**：
     - `apps/desktop/src/renderer/styles/motion-tokens.ts`（token 单一来源）
     - `apps/desktop/src/renderer/components/ui/motion/{Reveal,Collapsible,ViewTransition,Pressable,index}.tsx`
-    - `spec/architecture/desktop-frontend-animation.md`
+    - `spec/knowledge/structure/desktop-frontend-animation.md`
   - **修改**：
     - `apps/desktop/tailwind.config.js`（同步 token）
     - `apps/desktop/src/renderer/styles/globals.css`（CSS 变量、`prefers-reduced-motion`、`[data-motion]` 选择器；删除 4 个死 `@keyframes`）
@@ -208,4 +208,4 @@ html[data-motion="standard"] *::after {
 3. `refactor(motion): migrate desktop renderer to motion tokens`（裸 duration / scale 全量替换；spinner 统一）
 4. `feat(motion): fill animation gaps across desktop renderer`（prompt 卡片选中、view mode、sidebar 折叠、toast 退出、modal key）
 5. `refactor(motion): drop framer-motion in favor of tailwindcss-animate`（kanban pinned 改造 + 卸依赖 + vite manualChunk 改 + bundle-budget 收紧）
-6. `docs(motion): sync stable architecture and domain spec`（`spec/architecture/desktop-frontend-animation.md` + `spec/domains/desktop/spec.md` 增章节）
+6. `docs(motion): sync stable structure and behavior spec`（`spec/knowledge/structure/desktop-frontend-animation.md` + `spec/knowledge/behavior/desktop.md` 增章节）

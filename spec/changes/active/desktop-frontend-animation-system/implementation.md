@@ -121,8 +121,8 @@ bundle 体积（gzip，本变更前一次 build）：
 
 - 状态：已完成（2026-05-16）
 - 做了什么：
-  - 新建 `spec/architecture/desktop-frontend-animation.md`：长期工程契约。包含 token 取值、意图分类表、5 个意图组件、用户偏好与 a11y、禁用清单、守护机制、稳定场景。
-  - `spec/domains/desktop/spec.md`：新增第 12 章 "Renderer Motion System"，固化 token 必须存在、必须有意图组件、必须支持 motionPreference、必须尊重 prefers-reduced-motion、不再依赖 framer-motion。
+  - 新建 `spec/knowledge/structure/desktop-frontend-animation.md`：长期工程契约。包含 token 取值、意图分类表、5 个意图组件、用户偏好与 a11y、禁用清单、守护机制、稳定场景。
+  - `spec/knowledge/behavior/desktop.md`：新增第 12 章 "Renderer Motion System"，固化 token 必须存在、必须有意图组件、必须支持 motionPreference、必须尊重 prefers-reduced-motion、不再依赖 framer-motion。
   - 更新 `tasks.md` cross-cutting 项的勾选状态。
 - 偏差：无。
 
@@ -153,8 +153,8 @@ bundle 体积（gzip，本变更前一次 build）：
 
 ## Synced Docs
 
-- `spec/architecture/desktop-frontend-animation.md`（C6 完成后落地）
-- `spec/domains/desktop/spec.md` 增加 Renderer Motion System 章节（C6 完成后落地）
+- `spec/knowledge/structure/desktop-frontend-animation.md`（C6 完成后落地）
+- `spec/knowledge/behavior/desktop.md` 增加 Renderer Motion System 章节（C6 完成后落地）
 
 ## Follow-ups
 

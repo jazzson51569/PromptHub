@@ -43,5 +43,5 @@
 
 ## Follow-ups
 
-- 继续观察是否需要把新版双栏桌面首页模块配置同步进稳定 `spec/domains/desktop/spec.md`。
+- 继续观察是否需要把新版双栏桌面首页模块配置同步进稳定 `spec/knowledge/behavior/desktop.md`。
 - 继续清理非本轮范围内的其他历史英文残留，避免 locale 文件出现跨语言混排。

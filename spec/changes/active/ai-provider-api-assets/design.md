@@ -2,7 +2,7 @@
 
 ## Overview
 
-新增 `spec/assets/ai-provider-apis.md`，作为 PromptHub 的稳定 API 资产文档。文档结构分为：
+新增 `spec/knowledge/reference/ai-provider-apis.md`，作为 PromptHub 的稳定 API 资产文档。文档结构分为：
 
 - purpose / evidence rules
 - built-in provider matrix
@@ -18,7 +18,7 @@
 ## Affected Areas
 
 - Stable assets:
-- `spec/assets/ai-provider-apis.md`
+- `spec/knowledge/reference/ai-provider-apis.md`
 - Stable logic / references:
 - `spec/README.md` 未来可补入口（本轮如不必要可暂不改）
 

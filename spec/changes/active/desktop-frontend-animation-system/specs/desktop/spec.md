@@ -1,6 +1,6 @@
 # Delta Spec
 
-本 delta 把"桌面端动画系统"作为可观察契约写进 `spec/domains/desktop/`。本变更不是新增功能，而是把"如何动、动多久、谁负责守护"的判定标准从隐式经验固化为可验证规则。
+本 delta 把"桌面端动画系统"作为可观察契约写进 `spec/knowledge/behavior/desktop.md`。本变更不是新增功能，而是把"如何动、动多久、谁负责守护"的判定标准从隐式经验固化为可验证规则。
 
 ## Added
 
@@ -14,7 +14,7 @@
   - `<Pressable>`：按钮按下微反馈
 - 桌面端必须支持用户级 motion 偏好（`settings.store` 中的 `motionPreference: 'off' | 'reduced' | 'standard'`），通过 `AppearanceSettings` 暴露选择器；偏好通过 `<html data-motion="...">` 数据属性生效，CSS 一处兜底。
 - 桌面端 `globals.css` 必须包含 `@media (prefers-reduced-motion: reduce)` 全局降级（动画时长降到 0.01 ms、`scroll-behavior: auto`），保障 a11y 合规；用户在应用内显式设置 `motionPreference = 'standard'` 时可覆盖系统偏好。
-- 桌面端 `spec/architecture/desktop-frontend-animation.md` 必须存在，作为长期动画工程契约（token 取值、意图分类表、禁用清单、缺失补齐清单）。
+- 桌面端 `spec/knowledge/structure/desktop-frontend-animation.md` 必须存在，作为长期动画工程契约（token 取值、意图分类表、禁用清单、缺失补齐清单）。
 
 ## Modified
 

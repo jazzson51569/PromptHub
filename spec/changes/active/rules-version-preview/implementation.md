@@ -26,7 +26,7 @@
 
 ## Synced Docs
 
-- `spec/logic/rules-workspace.md`
+- `spec/knowledge/behavior/rules-workspace.md`
 
 ## Follow-ups
 

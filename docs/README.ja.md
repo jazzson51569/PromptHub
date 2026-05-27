@@ -438,7 +438,7 @@ PromptHub/
 - 公開ドキュメントインデックス：[`docs/README.md`](./README.md)
 - 内部 SSD / spec：[`spec/README.md`](../spec/README.md)
 
-非自明な変更は、まず `spec/changes/active/<change-key>/` 配下に変更フォルダを作成（`proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`）、リリース後に永続的な内容を `spec/domains/`、`spec/architecture/` に同期し、必要に応じて `docs/` や `README.md` も更新してください。
+非自明な変更は、まず `spec/changes/active/<change-key>/` 配下に変更フォルダを作成（`proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`）、リリース後に永続的な内容を `spec/workflow/*`、`spec/knowledge/*`、`spec/releases/`、`spec/adr/` に同期し、必要に応じて `docs/` や `README.md` も更新してください。
 
 <div id="meta"></div>
 

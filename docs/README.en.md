@@ -438,7 +438,7 @@ PromptHub/
 - Public doc index: [`docs/README.md`](./README.md)
 - Internal SSD / specs: [`spec/README.md`](../spec/README.md)
 
-For non-trivial changes, start a change folder under `spec/changes/active/<change-key>/` (with `proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`). Once it ships, sync the durable bits back to `spec/domains/`, `spec/architecture/`, and update `docs/` or the root `README.md` if user-facing contracts changed.
+For non-trivial changes, start a change folder under `spec/changes/active/<change-key>/` (with `proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`). Once it ships, sync the durable bits back to `spec/workflow/*`, `spec/knowledge/*`, `spec/releases/`, or `spec/adr/`, and update `docs/` or the root `README.md` if user-facing contracts changed.
 
 <div id="meta"></div>
 

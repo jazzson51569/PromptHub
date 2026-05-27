@@ -19,7 +19,7 @@ Completed.
   - 删除手写维护的“特别感谢”贡献者名单，只保留 GitHub Contributors 图，降低后续过期风险。
 - 更新 `docs/contributing.md`，使其与当前 monorepo 结构、根级脚本、desktop / web 边界和 SSD 工作流保持一致。
 - 更新 `docs/README.md`，补充根级 `CONTRIBUTING.md` 与 `docs/contributing.md` 的职责关系。
-- 更新 `spec/domains/release/spec.md`，把仓库入口 README 与贡献入口文件的稳定约束写回 stable spec。
+- 更新 `spec/releases/release-rules.md`，把仓库入口 README 与贡献入口文件的稳定约束写回 stable spec。
 - 将 `docs/README.en.md`、`docs/README.zh-TW.md`、`docs/README.ja.md`、`docs/README.de.md`、`docs/README.es.md`、`docs/README.fr.md` 同步到新的 README 骨架：
   - 统一把“使用形态 -> 截图 -> 功能 -> 桌面下载 -> 快速开始 -> CLI -> 自部署 Web -> Roadmap / Changelog -> Contribution & Development”作为主线。
   - 将截图区上移到功能说明之前，保持与根 `README.md` 一致的浏览顺序。

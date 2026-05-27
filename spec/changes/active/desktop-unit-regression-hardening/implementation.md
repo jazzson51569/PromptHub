@@ -25,8 +25,8 @@
 
 ## Synced Docs
 
-- `spec/domains/desktop/spec.md`
-- `spec/logic/rules-workspace.md`
+- `spec/knowledge/behavior/desktop.md`
+- `spec/knowledge/behavior/rules-workspace.md`
 
 ## Follow-ups
 

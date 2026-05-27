@@ -50,7 +50,7 @@ GitHub 对根级 `CONTRIBUTING.md` 有天然识别能力，因此采用以下分
 
 ## Stable Spec Sync
 
-`spec/domains/release/spec.md` 补充仓库入口文档规则：
+`spec/releases/release-rules.md` 补充仓库入口文档规则：
 
 - 根 README 应清晰区分桌面版、自部署 Web 与 CLI 的入口。
 - GitHub 可发现的贡献入口必须存在，并指向当前有效的 canonical 贡献指南。

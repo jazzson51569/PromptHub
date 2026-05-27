@@ -440,7 +440,7 @@ PromptHub/
 - 對外文件索引：[`docs/README.md`](./README.md)
 - 內部 SSD / spec：[`spec/README.md`](../spec/README.md)
 
-非平凡改動建議先在 `spec/changes/active/<change-key>/` 下建立一個 change 資料夾（`proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`），完成後把穩定事實回填到 `spec/domains/`、`spec/architecture/`，並在需要時更新 `docs/`、`README.md`。
+非平凡改動建議先在 `spec/changes/active/<change-key>/` 下建立一個 change 資料夾（`proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`），完成後把穩定事實回填到 `spec/workflow/*`、`spec/knowledge/*`、`spec/releases/` 或 `spec/adr/`，並在需要時更新 `docs/`、`README.md`。
 
 <div id="meta"></div>
 

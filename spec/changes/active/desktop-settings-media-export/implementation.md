@@ -66,7 +66,7 @@
 
 ## Follow-ups
 
-- 如果这组改动准备正式交付，再决定是否把稳定文档同步到 `spec/domains/`、`spec/logic/`、`spec/assets/` 或 `spec/architecture/`。
+- 如果这组改动准备正式交付，再决定是否把稳定文档同步到 `spec/workflow/*`、`spec/knowledge/*`、`spec/rules/`、`spec/releases/` 或 `spec/adr/`。
 - PR #110 仍不建议直接合并；`ScannedSkill` 可空字段契约与 Hermes / nested 扫描测试缺口仍需单独处理。
 
 ### Liquid Glass Refinement

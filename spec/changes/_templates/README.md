@@ -6,7 +6,7 @@ This directory provides the default template set for new `spec/changes/active/<c
 
 PromptHub borrows OpenSpec's core artifact-guided workflow:
 
-- stable domain docs live in `spec/domains/`
+- stable project docs live in `spec/workflow/*`, `spec/knowledge/*`, `spec/rules/`, `spec/releases/`, and `spec/adr/`
 - active changes live in `spec/changes/active/<change-key>/`
 - each change owns delta specs under `specs/<domain>/spec.md`
 - completed changes move to `spec/changes/archive/`
@@ -14,7 +14,7 @@ PromptHub borrows OpenSpec's core artifact-guided workflow:
 PromptHub keeps a few project-specific additions:
 
 - `implementation.md` is required
-- `spec/architecture/` stores stable engineering guidance
+- `spec/knowledge/structure/` stores stable engineering guidance
 - `spec/issues/` stores ongoing risk and quality tracking
 - `spec/changes/legacy/` stores historical documents that are still useful but not current truth
 
@@ -48,4 +48,4 @@ Recommended order:
 1. A non-trivial change is incomplete if it has no delta spec.
 2. Delta specs must live under `specs/<domain>/spec.md`, not as a flat top-level `spec.md` file.
 3. `implementation.md` should describe what actually landed, not just restate the original plan.
-4. When the change ships, sync durable truth into `spec/domains/`, `spec/logic/`, `spec/assets/`, and `spec/architecture/` before archiving.
+4. When the change ships, sync durable truth into `spec/workflow/*`, `spec/knowledge/*`, `spec/rules/`, `spec/releases/`, or `spec/adr/` before archiving.

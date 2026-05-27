@@ -27,7 +27,7 @@
   - 全仓清理：把 `active:scale-90` 与 `active:scale-95` 统一；把裸 `duration-XXX` 迁移到 token 名；把手写 spinner 改用 `Loader2Icon`。
   - 补齐缺失动画：Prompt 卡片选中过渡、View mode 切换、Sidebar 折叠、Toast 退出、Modal 入场曲线统一。
   - 去掉 `framer-motion` 依赖：`PromptKanbanView` 中 pinned section 的 layout 动画用 CSS / View Transition 替代；从 `apps/desktop/package.json` 卸载、从 `vite.config.ts` 的 `ui-vendor` manualChunk 中移除；`bundle-budget.json` 收紧 `ui-vendor` 阈值锁住成果。
-  - 新增 `spec/architecture/desktop-frontend-animation.md` 作为长期工程契约；在 `spec/domains/desktop/spec.md` 加 1 条稳定要求。
+  - 新增 `spec/knowledge/structure/desktop-frontend-animation.md` 作为长期工程契约；在 `spec/knowledge/behavior/desktop.md` 加 1 条稳定要求。
 - Out of scope:
   - 不改任何业务逻辑、不动 IPC、不动数据 schema、不动 i18n key。
   - 不引入 ESLint 自定义规则禁裸 duration（先靠 review checklist + 文档约束，等真的有回归再加规则）。

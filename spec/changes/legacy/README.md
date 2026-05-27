@@ -4,6 +4,6 @@
 
 - 内容仍可阅读和引用
 - 但它们默认不是当前稳定真相源
-- 当前稳定行为应优先看 `spec/domains/`、`spec/logic/`、`spec/assets/` 和 `spec/architecture/`
+- 当前稳定行为应优先看 `spec/workflow/*`、`spec/knowledge/*`、`spec/rules/`、`spec/releases/` 和 `spec/adr/`
 
 本目录中的 `docs-08-todo/` 已从旧 `docs/08-TODO/` 原文恢复。

@@ -36,7 +36,7 @@ Implemented a guarded desktop preview-update opt-in flow. Stable remains the def
 
 ## Synced Specs And Docs
 
-- Updated `spec/domains/release/spec.md`
+- Updated `spec/releases/release-rules.md`
 - Updated `README.md`
 - Updated `.github/workflows/release.yml`
 - Updated `docs/README.en.md`, `docs/README.ja.md`, `docs/README.zh-TW.md`, `docs/README.de.md`, `docs/README.fr.md`, and `docs/README.es.md`

@@ -210,8 +210,8 @@ vite 构建告警：`Some chunks are larger than 500 kB after minification`。
 ## Synced Docs
 
 - 全部完成后同步：
-  - `spec/domains/desktop/spec.md`：把虚拟化、bundle 预算作为稳定行为写入（已完成 2026-05-16）。
-  - `spec/architecture/desktop-frontend-performance.md`：新增桌面端 renderer 性能策略文档（已完成 2026-05-16）。
+  - `spec/knowledge/behavior/desktop.md`：把虚拟化、bundle 预算作为稳定行为写入（已完成 2026-05-16）。
+  - `spec/knowledge/structure/desktop-frontend-performance.md`：新增桌面端 renderer 性能策略文档（已完成 2026-05-16）。
   - `docs/contributing.md`：补充"如何运行 build:analyze 与 budget 检查"——本次未做，留作 follow-up（贡献者面向 doc，不阻塞本次闭环）。
 - 完成后再把本变更从 `spec/changes/active/` 归档到 `spec/changes/archive/`。
 

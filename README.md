@@ -445,8 +445,11 @@ PromptHub/
 - 完整指南：[`docs/contributing.md`](./docs/contributing.md)
 - 对外文档索引：[`docs/README.md`](./docs/README.md)
 - 内部 SSD / spec：[`spec/README.md`](./spec/README.md)
+- 项目内置 spec skill：[`spec-init`](./.agents/skills/spec-init/SKILL.md)
+- `spec-init` 上游仓库：[`git@github.com:legeling/spec-init.git`](git@github.com:legeling/spec-init.git)
+- 文档拓扑路由：[`spec-init.topology.yml`](./spec-init.topology.yml)
 
-非平凡改动建议先在 `spec/changes/active/<change-key>/` 下建一个 change 文件夹（`proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`），完成后把稳定事实回填到 `spec/domains/`、`spec/architecture/`，并在需要时更新 `docs/`、`README.md`。
+PromptHub 当前采用的是 `spec-init` 文档边界 + `spec/changes/active/<change-key>/` 变更流：项目级稳定文档主入口使用 `spec/workflow/*`、`spec/knowledge/*`、`spec/rules/`、`spec/releases/`，非平凡改动继续在 change 文件夹里写 `proposal.md` / `specs/<domain>/spec.md` / `design.md` / `tasks.md` / `implementation.md`，完成后再把稳定事实同步回这些长期真相源。
 
 <div id="meta"></div>
 

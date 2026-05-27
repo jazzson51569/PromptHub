@@ -76,6 +76,6 @@
 ## Cross-cutting
 
 - [x] 每完成一个阶段，更新 `implementation.md` 中对应小节，记录实际数据与偏差
-- [x] 把"桌面端长列表虚拟化"、"bundle 预算"作为稳定行为同步到 `spec/domains/desktop/spec.md`
-- [x] 在 `spec/architecture/` 下新增 `desktop-frontend-performance.md` 描述桌面端 renderer 性能策略
+- [x] 把"桌面端长列表虚拟化"、"bundle 预算"作为稳定行为同步到 `spec/knowledge/behavior/desktop.md`
+- [x] 在 `spec/knowledge/structure/` 下新增 `desktop-frontend-performance.md` 描述桌面端 renderer 性能策略
 - [ ] PR 描述附带前后体积对比与关键性能数字（PR 时补充）

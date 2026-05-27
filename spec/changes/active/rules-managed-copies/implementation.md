@@ -33,7 +33,7 @@ In progress.
 
 ## Synced Docs
 
-- `spec/logic/rules-workspace.md`
+- `spec/knowledge/behavior/rules-workspace.md`
 - `spec/changes/active/rules-managed-copies/proposal.md`
 - `spec/changes/active/rules-managed-copies/design.md`
 - `spec/changes/active/rules-managed-copies/tasks.md`

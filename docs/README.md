@@ -11,9 +11,9 @@
 
 其中根 `CONTRIBUTING.md` 只是 GitHub 的发现入口，当前有效的贡献指南仍是 `docs/contributing.md`。
 
-内部需求、规格、设计、任务、实现、架构、问题追踪已经统一迁入 `spec/`。如果你要查 SSD 工作流或内部工程文档，请直接看 `spec/README.md`。
+内部需求、规格、设计、任务、实现、规则、发布记录与问题追踪已经统一迁入 `spec/`。如果你要查 SSD 工作流或内部工程文档，请直接看 `spec/README.md`。
 
-`spec/` 的内部结构参考 OpenSpec，并且比此前版本更完整：既有稳定 `spec/domains/`，也有活跃 delta specs、稳定逻辑、固定资产、archive、legacy 与模板目录，内部文档不再混放在 `docs/`。
+`spec/` 的内部结构参考 `spec-init` 边界与 OpenSpec 风格变更流：稳定项目文档位于 `spec/workflow/*`、`spec/knowledge/*`、`spec/rules/`、`spec/releases/`，活跃 delta specs 位于 `spec/changes/active/`，内部文档不再混放在 `docs/`。
 
 ## `docs/` 中应放什么
 
@@ -51,10 +51,10 @@ docs/
 ## 内部文档入口
 
 - `spec/README.md`
-- `spec/domains/`
-- `spec/logic/`
-- `spec/assets/`
-- `spec/architecture/`
+- `spec/workflow/`
+- `spec/knowledge/`
+- `spec/rules/`
+- `spec/releases/`
 - `spec/changes/active/`
 - `spec/changes/archive/`
 - `spec/changes/legacy/`

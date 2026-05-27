@@ -91,10 +91,11 @@ PromptHub 对非 trivial 改动采用 SSD（Specification / Design / Delivery）
 
 实施完成后需要同步：
 
-- 稳定行为到 `spec/domains/`
-- 稳定逻辑到 `spec/logic/`
-- 固定资产到 `spec/assets/`
-- 长期工程约束到 `spec/architecture/`
+- 项目级稳定入口到 `spec/workflow/*`
+- 稳定行为与规则到 `spec/knowledge/behavior/`
+- 固定参考资料到 `spec/knowledge/reference/`
+- 长期工程约束到 `spec/knowledge/structure/`
+- 发布规则与版本摘要到 `spec/releases/`
 - 对外契约到 `docs/` 或根 `README.md`
 
 更多入口见：

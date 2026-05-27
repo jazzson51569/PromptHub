@@ -11,7 +11,7 @@ PromptHub 当前已经维护一组 AI provider 默认 host，并在 renderer / m
 ## Scope
 
 - In scope:
-- 在 `spec/assets/` 下新增 AI 供应商 API 资产文档
+- 在 `spec/knowledge/reference/` 下新增 AI 供应商 API 资产文档
 - 汇总 PromptHub 当前主要供应商的默认 host、官方 base URL、鉴权方式、主要聊天端点与模型发现端点
 - 区分官方已核验信息与 PromptHub 当前推断信息
 - 对文档整理过程中遇到的新 provider 名称做 taxonomy 归类，区分独立厂商、聚合路由平台、模型族与常见别名
