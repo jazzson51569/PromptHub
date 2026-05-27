@@ -23,6 +23,7 @@ describe("prompt store save-sync", () => {
       prompts: [],
       selectedId: null,
       selectedIds: [],
+      lastSelectedId: null,
       isLoading: false,
       searchQuery: "",
       filterTags: [],
@@ -95,5 +96,27 @@ describe("prompt store save-sync", () => {
     await usePromptStore.getState().incrementUsageCount("prompt-1");
 
     expect(scheduleAllSaveSync).not.toHaveBeenCalled();
+  });
+
+  it("keeps lastSelectedId when the current selection is cleared", () => {
+    usePromptStore.getState().selectPrompt("prompt-1");
+    usePromptStore.getState().selectPrompt(null);
+
+    expect(usePromptStore.getState().selectedId).toBeNull();
+    expect(usePromptStore.getState().selectedIds).toEqual([]);
+    expect(usePromptStore.getState().lastSelectedId).toBe("prompt-1");
+  });
+
+  it("updates lastSelectedId only for single explicit selections", () => {
+    usePromptStore.getState().selectPrompt("prompt-1");
+    usePromptStore.getState().setSelectedIds(["prompt-1", "prompt-2"]);
+
+    expect(usePromptStore.getState().selectedId).toBe("prompt-1");
+    expect(usePromptStore.getState().lastSelectedId).toBe("prompt-1");
+
+    usePromptStore.getState().setSelectedIds(["prompt-2"]);
+
+    expect(usePromptStore.getState().selectedId).toBe("prompt-2");
+    expect(usePromptStore.getState().lastSelectedId).toBe("prompt-2");
   });
 });

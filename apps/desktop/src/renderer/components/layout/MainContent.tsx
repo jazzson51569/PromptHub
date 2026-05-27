@@ -346,6 +346,7 @@ function PromptSkillMainContent() {
   const prompts = usePromptStore((state) => state.prompts);
   const selectedId = usePromptStore((state) => state.selectedId);
   const selectedIds = usePromptStore((state) => state.selectedIds);
+  const lastSelectedId = usePromptStore((state) => state.lastSelectedId);
   const selectPrompt = usePromptStore((state) => state.selectPrompt);
   const setSelectedIds = usePromptStore((state) => state.setSelectedIds);
   const createPrompt = usePromptStore((state) => state.createPrompt);
@@ -1177,6 +1178,17 @@ function PromptSkillMainContent() {
   // kanban 视图各自内部虚拟化。三个消费方都可以安全地拿到完整数据，不再需要
   // 手写的分批渲染补丁。
   const visiblePrompts = sortedPrompts;
+
+  useEffect(() => {
+    if (selectedId || !lastSelectedId) {
+      return;
+    }
+
+    const canRestore = visiblePrompts.some((prompt) => prompt.id === lastSelectedId);
+    if (canRestore) {
+      selectPrompt(lastSelectedId);
+    }
+  }, [lastSelectedId, selectPrompt, selectedId, visiblePrompts]);
 
   const selectedPrompt = prompts.find((p) => p.id === selectedId);
 

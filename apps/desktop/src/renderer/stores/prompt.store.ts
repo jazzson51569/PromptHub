@@ -22,6 +22,7 @@ interface PromptState {
   prompts: Prompt[];
   selectedId: string | null;
   selectedIds: string[];
+  lastSelectedId: string | null;
   isLoading: boolean;
   searchQuery: string;
   filterTags: string[];
@@ -67,6 +68,7 @@ export const usePromptStore = create<PromptState>()(
       prompts: [],
       selectedId: null,
       selectedIds: [],
+      lastSelectedId: null,
       isLoading: false,
       searchQuery: "",
       filterTags: [],
@@ -145,10 +147,11 @@ export const usePromptStore = create<PromptState>()(
       },
 
       selectPrompt: (id) =>
-        set({
+        set((state) => ({
           selectedId: id,
           selectedIds: id ? [id] : [],
-        }),
+          lastSelectedId: id ?? state.lastSelectedId,
+        })),
 
       setSelectedIds: (ids) =>
         set((state) => ({
@@ -161,6 +164,12 @@ export const usePromptStore = create<PromptState>()(
               : ids.includes(state.selectedId || "")
                 ? state.selectedId
                 : null,
+          lastSelectedId:
+            ids.length === 1
+              ? ids[0]
+              : ids.includes(state.lastSelectedId || "")
+                ? state.lastSelectedId
+                : state.lastSelectedId,
         })),
 
       setSearchQuery: (query) => set({ searchQuery: query }),
@@ -229,6 +238,7 @@ export const usePromptStore = create<PromptState>()(
         galleryImageSize: state.galleryImageSize,
         kanbanColumns: state.kanbanColumns,
         promptTypeFilter: state.promptTypeFilter,
+        lastSelectedId: state.lastSelectedId,
       }),
     },
   ),
