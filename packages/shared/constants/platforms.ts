@@ -225,7 +225,7 @@ export const SKILL_PLATFORMS: SkillPlatform[] = [
     icon: "Terminal",
     rootDir: {
       darwin: "~/.config/opencode",
-      win32: "%APPDATA%\\opencode",
+      win32: "%USERPROFILE%\\.config\\opencode",
       linux: "~/.config/opencode",
     },
     skillsRelativePath: "skills",

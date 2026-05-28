@@ -242,6 +242,40 @@ describe("skill-installer-utils", () => {
         "/tmp/opencode-root/docs/AGENTS.md",
       );
     });
+
+    it("uses %USERPROFILE%\\.config\\opencode as the default OpenCode root on Windows", () => {
+      const originalPlatform = process.platform;
+      const originalHome = process.env.HOME;
+      const originalUserProfile = process.env.USERPROFILE;
+
+      Object.defineProperty(process, "platform", {
+        value: "win32",
+        configurable: true,
+      });
+      process.env.HOME = "C:\\Users\\TestUser";
+      process.env.USERPROFILE = "C:\\Users\\TestUser";
+      vi.mocked(initDatabase).mockReturnValue({
+        prepare: vi.fn().mockReturnValue({ get: vi.fn().mockReturnValue(undefined) }),
+      } as unknown as ReturnType<typeof initDatabase>);
+      invalidateCustomPathsCache();
+
+      const platform = getPlatformById("opencode");
+      expect(platform).toBeDefined();
+      expect(getPlatformRootDir(platform!)).toBe(
+        "C:\\Users\\TestUser\\.config\\opencode",
+      );
+      const skillsDir = getPlatformSkillsDir(platform!);
+      expect(skillsDir.startsWith("C:\\Users\\TestUser\\.config\\opencode")).toBe(true);
+      expect(skillsDir.endsWith("skills")).toBe(true);
+
+      Object.defineProperty(process, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+      process.env.HOME = originalHome;
+      process.env.USERPROFILE = originalUserProfile;
+      invalidateCustomPathsCache();
+    });
   });
 
   // ---------- validateMCPConfig ----------
