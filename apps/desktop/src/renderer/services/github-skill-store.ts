@@ -5,7 +5,7 @@ import type {
   RegistrySkill,
   SkillCategory,
 } from "@prompthub/shared/types";
-import { parseGithubRepo } from "@prompthub/shared/utils/github-repo";
+import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 
 function stripQuotes(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, "");
@@ -203,7 +203,7 @@ export async function loadGitHubSkillRepo(
     invalidRepoMessage: string;
   },
 ): Promise<RegistrySkill[]> {
-  const parsedRepo = parseGithubRepo(repoUrl);
+  const parsedRepo = parseGitRepo(repoUrl);
   if (!parsedRepo) {
     throw new Error("Invalid GitHub repository URL");
   }

@@ -106,7 +106,7 @@ describe("CreateSkillModal GitHub import", () => {
     );
 
     await act(async () => {
-      fireEvent.click(view.getByText("Install from GitHub"));
+      fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
     fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
@@ -212,7 +212,7 @@ describe("CreateSkillModal GitHub import", () => {
     );
 
     await act(async () => {
-      fireEvent.click(view.getByText("Install from GitHub"));
+      fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
     fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
@@ -261,7 +261,7 @@ describe("CreateSkillModal GitHub import", () => {
     );
 
     await act(async () => {
-      fireEvent.click(view.getByText("从 GitHub 安装"));
+      fireEvent.click(view.getByText("从 Git 仓库安装"));
     });
 
     fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
@@ -314,7 +314,7 @@ describe("CreateSkillModal GitHub import", () => {
     );
 
     await act(async () => {
-      fireEvent.click(view.getByText("Install from GitHub"));
+      fireEvent.click(view.getByText("Install from Git Repository"));
     });
 
     fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
@@ -328,6 +328,62 @@ describe("CreateSkillModal GitHub import", () => {
     await waitFor(() => {
       expect(scanRemoteGithub).toHaveBeenCalledWith(
         "git@github.com:obra/superpowers.git",
+        expect.any(Array),
+      );
+      expect(fetchRemoteContent).not.toHaveBeenCalled();
+      expect(view.getByText("Found 1 import option(s)")).toBeTruthy();
+    });
+  });
+
+  it("uses clone-based remote scan for self-hosted HTTPS git repositories", async () => {
+    const scanRemoteGithub = vi.fn().mockResolvedValue([
+      {
+        slug: "icelemon-skill",
+        name: "icelemon-skill",
+        install_name: "icelemon-skill",
+        description: "Self-hosted scanned skill",
+        category: "dev",
+        author: "icelemon",
+        source_url: "/tmp/gitea/icelemon-skill",
+        content_url: "/tmp/gitea/icelemon-skill",
+        tags: ["dev"],
+        version: "1.0.0",
+        content: "# icelemon",
+        compatibility: ["claude"],
+      },
+    ]);
+
+    const fetchRemoteContent = vi.fn();
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent,
+          scanRemoteGithub,
+        },
+      },
+    });
+
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Install from Git Repository"));
+    });
+
+    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
+      target: { value: "https://gitea.example.com/icelemon/skills" },
+    });
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Scan Repository"));
+    });
+
+    await waitFor(() => {
+      expect(scanRemoteGithub).toHaveBeenCalledWith(
+        "https://gitea.example.com/icelemon/skills",
         expect.any(Array),
       );
       expect(fetchRemoteContent).not.toHaveBeenCalled();

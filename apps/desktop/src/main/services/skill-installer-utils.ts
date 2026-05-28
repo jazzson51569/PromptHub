@@ -99,14 +99,14 @@ export function gitClone(url: string, destDir: string): Promise<void> {
     throw new Error("Git clone URL cannot start with '-'");
   }
 
-  const isSshGitHubUrl = /^git@github\.com:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
+  const isSshGitUrl = /^git@[^:]+:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/.test(
     url,
   );
 
-  if (!isSshGitHubUrl) {
+  if (!isSshGitUrl) {
     const parsedUrl = new URL(url);
     if (parsedUrl.protocol !== "https:") {
-      throw new Error("Only HTTPS or git@github.com SSH clone URLs are allowed");
+      throw new Error("Only HTTPS or git@<host> SSH clone URLs are allowed");
     }
   }
 

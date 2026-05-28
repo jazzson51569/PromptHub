@@ -12,6 +12,7 @@ import type {
 } from "@prompthub/shared/types";
 
 import { BUILTIN_SKILL_REGISTRY } from "@prompthub/shared/constants/skill-registry";
+import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import { loadGitHubSkillRepo, parseFrontmatter, toTitleCase } from "../../services/github-skill-store";
 import {
   parseSkillsShDetail,
@@ -221,7 +222,12 @@ export function useSkillStoreRemoteSync(
   const loadGitHubRepoSkills = useCallback(
     async (repoUrl: string): Promise<RegistrySkill[]> => {
       try {
-        if (/^git@github\.com:/i.test(repoUrl.trim())) {
+        const parsedRepo = parseGitRepo(repoUrl);
+        if (!parsedRepo) {
+          throw new Error("Invalid git repository URL");
+        }
+
+        if (!isGitHubHost(parsedRepo.host) || parsedRepo.protocol === "ssh") {
           return await window.api.skill.scanRemoteGithub(repoUrl, registrySkills);
         }
 
@@ -244,12 +250,13 @@ export function useSkillStoreRemoteSync(
       } catch (error) {
         if (
           error instanceof Error &&
-          error.message === "Invalid GitHub repository URL"
+          (error.message === "Invalid GitHub repository URL" ||
+            error.message === "Invalid git repository URL")
         ) {
           throw new Error(
             t(
               "skill.invalidGitRepo",
-              "Please enter a GitHub repository URL, or use a local directory path instead",
+              "Please enter a Git repository URL, or use a local directory path instead",
             ),
           );
         }

@@ -1,5 +1,7 @@
 import type { SkillStoreSource } from "@prompthub/shared/types";
 
+import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
+
 export type CustomStoreSourceType = Extract<
   SkillStoreSource["type"],
   "marketplace-json" | "git-repo" | "local-dir"
@@ -55,10 +57,7 @@ export function isSupportedGitRepoSource(input: string): boolean {
   if (!value) return false;
   if (isLikelyLocalSource(value)) return true;
 
-  const normalized = value
-    .replace(/^git@github\.com:/i, "https://github.com/")
-    .replace(/\.git$/i, "");
-  return /^https?:\/\/github\.com\/[^/]+\/[^/]+/i.test(normalized);
+  return parseGitRepo(value) !== null;
 }
 
 export function validateStoreSourceInput(
@@ -82,9 +81,7 @@ export function validateStoreSourceInput(
       return normalizeLocalSourcePath(trimmed);
     }
 
-    return trimmed
-      .replace(/^git@github\.com:/i, "https://github.com/")
-      .replace(/\.git$/i, "");
+    return trimmed;
   }
 
   let parsedUrl: URL;

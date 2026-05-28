@@ -643,6 +643,75 @@ describe("SkillStore remote loading", () => {
     expect(fetchRemoteContent).not.toHaveBeenCalled();
   });
 
+  it("loads self-hosted HTTPS git-repo store sources through clone-based scan", async () => {
+    const fetchRemoteContent = vi.fn();
+    const scanRemoteGithub = vi.fn().mockResolvedValue([
+      {
+        slug: "icelemon-skill",
+        name: "icelemon-skill",
+        install_name: "icelemon-skill",
+        description: "Gitea scanned store skill",
+        category: "dev",
+        author: "icelemon",
+        source_url: "/tmp/gitea-store/icelemon-skill",
+        content_url: "/tmp/gitea-store/icelemon-skill",
+        tags: ["dev"],
+        version: "1.0.0",
+        content: "# icelemon",
+        compatibility: ["claude", "cursor"],
+      },
+    ]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent,
+          scanRemoteGithub,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      customStoreSources: [
+        {
+          id: "gitea-repo",
+          name: "Gitea Repo",
+          type: "git-repo",
+          url: "https://gitea.example.com/icelemon/skills",
+          enabled: true,
+          createdAt: Date.now(),
+        },
+      ],
+      selectedStoreSourceId: "gitea-repo",
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(
+        useSkillStore.getState().remoteStoreEntries["gitea-repo"]?.skills,
+      ).toHaveLength(1);
+    });
+
+    expect(scanRemoteGithub).toHaveBeenCalledWith(
+      "https://gitea.example.com/icelemon/skills",
+      expect.any(Array),
+    );
+    expect(fetchRemoteContent).not.toHaveBeenCalled();
+  });
+
   it("binds the catalog search box to storeSearchQuery", async () => {
     installWindowMocks({
       api: {

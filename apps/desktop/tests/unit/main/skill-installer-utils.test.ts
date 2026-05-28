@@ -504,7 +504,13 @@ describe("skill-installer-utils", () => {
     it("does not reject SSH-style GitHub clone URLs during upfront validation", () => {
       expect(() => {
         void gitClone("git@github.com:user/repo.git", "/tmp/dest");
-      }).not.toThrow(/Only HTTPS or git@github.com SSH clone URLs are allowed/);
+      }).not.toThrow(/Only HTTPS or git@<host> SSH clone URLs are allowed/);
+    });
+
+    it("does not reject SSH-style self-hosted git clone URLs during upfront validation", () => {
+      expect(() => {
+        void gitClone("git@gitea.example.com:icelemon/skills.git", "/tmp/dest");
+      }).not.toThrow(/Only HTTPS or git@<host> SSH clone URLs are allowed/);
     });
   });
 });

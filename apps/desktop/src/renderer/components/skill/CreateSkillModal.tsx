@@ -28,6 +28,7 @@ import rehypeHighlight from "rehype-highlight";
 import { useSkillStore } from "../../stores/skill.store";
 import { useSettingsStore } from "../../stores/settings.store";
 import { loadGitHubSkillRepo } from "../../services/github-skill-store";
+import { isGitHubHost, parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import {
   generateSkillContent,
   polishSkillContent,
@@ -455,7 +456,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
 
   const handleGitHubInstall = async () => {
     if (!githubUrl.trim()) {
-      setError(t("skill.enterGithubUrl", "Please enter a GitHub URL"));
+      setError(t("skill.enterGithubUrl", "Please enter a Git repository URL"));
       return;
     }
 
@@ -463,19 +464,14 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     setError(null);
 
     try {
-      const match = githubUrl
-        .trim()
-        .replace(/^git@github\.com:/, "https://github.com/")
-        .match(
-          /^https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/,
-        );
-      if (!match) {
+      const parsedRepo = parseGitRepo(githubUrl.trim());
+      if (!parsedRepo) {
         throw new Error(
-          t("skill.invalidGithubUrl", "Invalid GitHub URL format"),
+          t("skill.invalidGithubUrl", "Invalid Git repository URL format"),
         );
       }
 
-      const scannedSkills = /^git@github\.com:/i.test(githubUrl.trim())
+      const scannedSkills = !isGitHubHost(parsedRepo.host) || parsedRepo.protocol === "ssh"
         ? await window.api.skill.scanRemoteGithub(
             githubUrl.trim(),
             BUILTIN_SKILL_REGISTRY,
@@ -951,7 +947,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
               {mode === "select"
                 ? t("skill.addSkill", "Add Skill")
                 : mode === "github"
-                  ? t("skill.installFromGithub", "Install from GitHub")
+                  ? t("skill.installFromGithub", "Install from Git Repository")
                   : mode === "manual"
                     ? t("skill.createTitle", "Create Skill")
                     : mode === "ai"
@@ -1045,10 +1041,10 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                 </div>
                 <div>
                   <h3 className="font-medium text-foreground">
-                    {t("skill.installFromGithub", "Install from GitHub")}
+                    {t("skill.installFromGithub", "Install from Git Repository")}
                   </h3>
                   <p className="text-sm text-muted-foreground">
-                    {t("skill.githubDesc", "Paste a GitHub repository URL")}
+                    {t("skill.githubDesc", "Paste a GitHub, Gitea, or self-hosted Git repository URL")}
                   </p>
                 </div>
               </button>
@@ -1096,7 +1092,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
             <div className="flex h-full min-h-0 flex-col gap-4">
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  {t("skill.githubUrl", "GitHub Repository URL")}
+                  {t("skill.githubUrl", "Git Repository URL")}
                 </label>
                 <input
                   type="text"
@@ -1108,14 +1104,14 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                 <p className="mt-2 text-xs text-muted-foreground">
                   {t(
                     "skill.githubUrlHint",
-                    "Use the repository root URL. PromptHub will clone the repo and prefer SKILL.md, then README.md as fallback.",
+                    "Use the repository root URL. PromptHub supports GitHub, Gitea, and other self-hosted Git repositories over HTTPS or SSH, then scans the repo for importable SKILL.md entries before you choose what to import.",
                   )}
                 </p>
                   <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground space-y-1.5">
                     <p>
                       {t(
                       "skill.githubConstraintHint",
-                      "Only repository root URLs are supported, such as https://github.com/owner/repo or git@github.com:owner/repo.git",
+                      "Only repository root URLs are supported, such as https://github.com/owner/repo, https://gitea.example.com/owner/repo, or git@host:owner/repo.git",
                     )}
                   </p>
                     <p>

@@ -23,14 +23,18 @@ describe("skill-store-source", () => {
     );
   });
 
-  it("only treats GitHub or local paths as supported git repo sources", () => {
+  it("accepts hosted and self-hosted git repo URLs plus local paths", () => {
     expect(isSupportedGitRepoSource("https://github.com/anthropics/skills")).toBe(
+      true,
+    );
+    expect(isSupportedGitRepoSource("https://gitea.example.com/icelemon/skills")).toBe(
+      true,
+    );
+    expect(isSupportedGitRepoSource("git@gitea.example.com:icelemon/skills.git")).toBe(
       true,
     );
     expect(isSupportedGitRepoSource("~/Projects/my-skill-repo")).toBe(true);
     expect(isLikelyLocalSource("file:///Users/demo/skills")).toBe(true);
-    expect(isSupportedGitRepoSource("https://gitlab.com/demo/skills")).toBe(
-      false,
-    );
+    expect(isSupportedGitRepoSource("https://gitlab.com/demo/skills")).toBe(true);
   });
 });

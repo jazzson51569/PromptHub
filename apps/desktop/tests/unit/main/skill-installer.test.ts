@@ -1776,58 +1776,82 @@ describe("scanLocalPreview nameConflict detection", () => {
 
 // ---------- S3: GitHub URL regex in IPC crud-handlers ----------
 
-describe("S3: GitHub URL regex validation in skill:create IPC", () => {
-  // The regex used in crud-handlers.ts: /^https?:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/
-  const GITHUB_REGEX =
-    /^https?:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/;
+describe("S3: git repository URL regex validation in skill:create IPC", () => {
+  const GIT_REPO_REGEX =
+    /^(?:https?:\/\/[^/]+\/[A-Za-z0-9_.-]*[A-Za-z_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_.-]*[A-Za-z_-][A-Za-z0-9_.-]*|git@[^:]+:[A-Za-z0-9_.-]*[A-Za-z_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_.-]*[A-Za-z_-][A-Za-z0-9_.-]*(?:\.git)?)$/;
 
   it.each([
     "https://github.com/owner/repo",
+    "https://gitea.example.com/owner/repo",
     "https://github.com/my-org/my-repo",
     "https://github.com/user_name/repo.name",
     "http://github.com/owner/repo",
-  ])("matches valid GitHub URL: %s", (url) => {
-    expect(GITHUB_REGEX.test(url)).toBe(true);
+    "git@github.com:owner/repo.git",
+    "git@gitea.example.com:owner/repo.git",
+  ])("matches valid git repo URL: %s", (url) => {
+    expect(GIT_REPO_REGEX.test(url)).toBe(true);
   });
 
   it.each([
     "https://evil.com/github.com/fake/path",
-    "https://not-github.com/owner/repo",
-    "https://github.com.evil.com/owner/repo",
+    "https://evil.com/owner/",
     "ftp://github.com/owner/repo",
     "github.com/owner/repo",
     "",
     "https://github.com/",
     "https://github.com/owner/",
+    "git@host-only",
   ])("rejects invalid or spoofed URL: %s", (url) => {
-    expect(GITHUB_REGEX.test(url)).toBe(false);
+    expect(GIT_REPO_REGEX.test(url)).toBe(false);
   });
 });
 
 // ---------- S3 + M3: installFromGithub URL validation & DB duplicate check ----------
 
 describe("SkillInstaller.installFromGithub", () => {
-  it("rejects an invalid GitHub URL (missing owner/repo)", async () => {
+  it("rejects an invalid git repository URL (missing owner/repo)", async () => {
     await SkillInstaller.init();
     // Need a real SkillDB for the DB check, but URL validation comes first
     const mockDb = { getByName: vi.fn() } as unknown as SkillDB;
     await expect(
       SkillInstaller.installFromGithub(
-        "https://evil.com/github.com/fake",
+        "https://evil.com/owner/",
         mockDb,
       ),
-    ).rejects.toThrow("Invalid GitHub URL");
+    ).rejects.toThrow("Invalid git repository URL");
   });
 
-  it("rejects GitHub URL with subdomain spoof", async () => {
+  it("accepts self-hosted git repository URLs", async () => {
     await SkillInstaller.init();
-    const mockDb = { getByName: vi.fn() } as unknown as SkillDB;
-    await expect(
-      SkillInstaller.installFromGithub(
-        "https://github.com.evil.com/owner/repo",
-        mockDb,
-      ),
-    ).rejects.toThrow("Invalid GitHub URL");
+
+    const mockDb = {
+      getByName: vi.fn().mockReturnValue(null),
+      create: vi.fn().mockReturnValue({ id: "skill-gitea" }),
+    } as unknown as SkillDB;
+
+    vi.spyOn(skillInstallerUtils, "gitClone").mockResolvedValue(undefined);
+    vi.spyOn(SkillInstaller, "resolveSingleSkillDirFromRepo").mockResolvedValue(
+      path.join(managedSkillsDir(), "icelemon-skills"),
+    );
+    vi.spyOn(SkillInstaller, "readManifest").mockResolvedValue({
+      name: "skills",
+      description: "Gitea repo",
+      version: "1.0.0",
+      author: "icelemon",
+      tags: ["gitea"],
+      instructions: "# Gitea repo",
+    });
+
+    const skillId = await SkillInstaller.installFromGithub(
+      "https://gitea.example.com/icelemon/skills",
+      mockDb,
+    );
+
+    expect(skillId).toBe("skill-gitea");
+    expect(skillInstallerUtils.gitClone).toHaveBeenCalledWith(
+      "https://gitea.example.com/icelemon/skills",
+      path.join(managedSkillsDir(), "icelemon-skills"),
+    );
   });
 
   it("rejects when a skill with the derived repo name already exists in DB", async () => {

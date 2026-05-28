@@ -21,7 +21,7 @@ import type {
   ScanLocalResult,
   SkillManifest,
 } from "@prompthub/shared/types";
-import { parseGithubRepo } from "@prompthub/shared/utils/github-repo";
+import { parseGitRepo } from "@prompthub/shared/utils/git-repo";
 import { installSkillFromSource } from "../../../../../packages/core/src/skills/install-flow";
 import { initDatabase } from "@/main/database";
 import { SkillDB } from "@/main/database/skill";
@@ -244,10 +244,10 @@ export class SkillInstaller {
   static async installFromGithub(url: string, db: SkillDB): Promise<string> {
     await this.init();
 
-    const parsedRepo = parseGithubRepo(url);
+    const parsedRepo = parseGitRepo(url);
     if (!parsedRepo) {
       throw new Error(
-        "Invalid GitHub URL: must be https://github.com/{owner}/{repo} or git@github.com:{owner}/{repo}.git",
+        "Invalid git repository URL: must be https://<host>/{owner}/{repo} or git@<host>:{owner}/{repo}.git",
       );
     }
     const userDir = parsedRepo.owner;
@@ -586,10 +586,10 @@ export class SkillInstaller {
   ): Promise<RegistrySkill[]> {
     await this.init();
 
-    const parsedRepo = parseGithubRepo(repoUrl);
+    const parsedRepo = parseGitRepo(repoUrl);
     if (!parsedRepo) {
       throw new Error(
-        "Invalid GitHub URL: must be https://github.com/{owner}/{repo} or git@github.com:{owner}/{repo}.git",
+        "Invalid git repository URL: must be https://<host>/{owner}/{repo} or git@<host>:{owner}/{repo}.git",
       );
     }
 
