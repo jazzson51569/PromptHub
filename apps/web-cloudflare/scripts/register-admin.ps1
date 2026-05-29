@@ -7,19 +7,8 @@ $ErrorActionPreference = "Stop"
 
 function Resolve-CaptchaAnswer {
   param(
-    [string]$Prompt,
     [string]$ImageData
   )
-
-  if ($Prompt -and $Prompt -match '^\s*(\d+)\s*([+-])\s*(\d+)\s*=\s*\?\s*$') {
-    $left = [int]$Matches[1]
-    $op = $Matches[2]
-    $right = [int]$Matches[3]
-    if ($op -eq "+") {
-      return [string]($left + $right)
-    }
-    return [string]($left - $right)
-  }
 
   if ($ImageData -and $ImageData.StartsWith("data:image/svg+xml;base64,")) {
     $encoded = $ImageData.Substring("data:image/svg+xml;base64,".Length)
@@ -29,7 +18,7 @@ function Resolve-CaptchaAnswer {
     return (Read-Host "Captcha answer").Trim()
   }
 
-  throw "Captcha response did not include a supported prompt or SVG image."
+  throw "Captcha response did not include a supported SVG image."
 }
 
 function ConvertFrom-SecureStringToPlainText {
@@ -52,7 +41,7 @@ if ($password.Length -lt 8) {
 }
 
 $captcha = Invoke-RestMethod -Method Get -Uri "$normalizedBaseUrl/api/auth/captcha"
-$answer = Resolve-CaptchaAnswer -Prompt $captcha.data.prompt -ImageData $captcha.data.imageData
+$answer = Resolve-CaptchaAnswer -ImageData $captcha.data.imageData
 
 $body = @{
   username = $Username

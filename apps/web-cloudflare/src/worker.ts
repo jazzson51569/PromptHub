@@ -157,7 +157,7 @@ app.notFound(async (c) => {
 
 app.onError((error, c) => {
   console.error(error);
-  return failure(c, 500, ErrorCode.INTERNAL_ERROR, error instanceof Error ? error.message : "Internal server error");
+  return failure(c, 500, ErrorCode.INTERNAL_ERROR, "Internal server error");
 });
 
 export default app;

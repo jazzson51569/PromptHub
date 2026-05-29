@@ -120,7 +120,7 @@ export async function uploadMediaBase64(c: Context<{ Bindings: Env; Variables: {
   const bytes = base64ToBytes(body.base64Data);
   await c.env.MEDIA.put(mediaKey(user.userId, kind, fileName), bytes, {
     httpMetadata: {
-      contentType: kind === "images" ? "application/octet-stream" : "application/octet-stream",
+      contentType: mediaContentType(kind, fileName),
     },
   });
   return success(c, fileName, 201);

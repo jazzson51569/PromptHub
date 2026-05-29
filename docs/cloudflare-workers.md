@@ -74,6 +74,9 @@
 
 ```powershell
 pnpm install
+pnpm --filter @prompthub/web-cloudflare cf-typegen
+pnpm --filter @prompthub/web-cloudflare typecheck
+pnpm --filter @prompthub/web-cloudflare test
 pnpm build:web:cf
 
 cd apps/web-cloudflare
@@ -85,6 +88,8 @@ npx wrangler secret put JWT_SECRET
 npx wrangler d1 migrations apply prompthub_d1 --remote
 npx wrangler deploy
 ```
+
+如果你修改了 `wrangler.jsonc` 里的 binding、bucket、D1 或其他 runtime 配置，重新部署前请再次执行 `pnpm --filter @prompthub/web-cloudflare cf-typegen`，以刷新 `worker-configuration.d.ts`。
 
 部署成功后，记录 Worker 输出的访问地址，例如：
 
@@ -168,6 +173,16 @@ git switch main
 git merge --ff-only origin/main
 git switch cf-workers-selfhost-sync
 git rebase main
+pnpm build:web:cf
+```
+
+当前仓库内建议的最小验证闭环：
+
+```powershell
+pnpm --filter @prompthub/web-cloudflare cf-typegen
+pnpm --filter @prompthub/web-cloudflare typecheck
+pnpm --filter @prompthub/web-cloudflare lint
+pnpm --filter @prompthub/web-cloudflare test
 pnpm build:web:cf
 ```
 

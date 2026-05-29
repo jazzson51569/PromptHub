@@ -8,10 +8,12 @@
     "./types": "./types/index.ts",
     "./types/*": "./types/*.ts",
     "./constants": "./constants/index.ts",
-    "./constants/*": "./constants/*.ts"
+    "./constants/*": "./constants/*.ts",
+    "./utils/*": "./utils/*.ts"
   },
   "files": [
     "types",
-    "constants"
+    "constants",
+    "utils"
   ]
 }
