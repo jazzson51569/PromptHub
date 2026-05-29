@@ -29,12 +29,27 @@
   - `copy / symlink` 只决定容器内 `repo/` 的 materialization 方式
   - 外部平台保持按逻辑 skill 名单激活，而不是长期依赖唯一平台目录并存
   - 老目录继续兼容，不做一次性强制迁移
+- 已把统一 variant 容器真正落地到主进程 repo 层：
+  - 新 managed skill 现在写入 `skills/<instance-key>/repo/`
+  - 容器元数据写入 `skills/<instance-key>/.prompthub/source.json` 与 `variant.json`
+  - `symlink` 模式只让容器内的 `repo/` 指向外部源目录，不再让整个 skill 根目录变成外部链接
+- 已把主要入口收敛到统一容器：
+  - `installFromSkillContent`
+  - `installFromLocalPath`
+  - `installFromGithub`
+  - `ensureLocalRepoPath` 的 repo 自举路径
+- 已把平台侧从“唯一目录并存”收敛为“逻辑名单激活”：
+  - 平台技能目录恢复为 `~/.xxx/skills/<logical-name>/`
+  - 当前激活的 variant 通过平台激活映射文件记录
+  - 同逻辑名 skill 在 PromptHub 库内可并存，但平台侧一次只激活一个
 - 已将上述长期方向同步到当前 change 的 `proposal.md` / `design.md` / `specs/desktop/spec.md`，作为后续代码继续收敛的约束。
 - 已修复 `SkillStore` 中 custom source 列表区被隐藏的 UI bug：此前 header 会显示数量，但 `showCatalog` 为 `false` 导致实际卡片列表不渲染。
 - 已补充并通过当前回归测试：
   - `apps/desktop/tests/unit/stores/skill.store.test.ts`
   - `apps/desktop/tests/unit/components/skill-store-remote.test.tsx`
   - `apps/desktop/tests/unit/main/skill-installer-platform.test.ts`
+  - `apps/desktop/tests/unit/main/skill-installer-repo.test.ts`
+  - `apps/desktop/tests/unit/main/skill-installer.test.ts` 中 `installFromGithub` 相关用例
 
 ## Expected Verification
 
@@ -46,6 +61,8 @@
 ## Verified So Far
 
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/skill-installer-platform.test.ts tests/unit/stores/skill.store.test.ts tests/unit/components/skill-store-remote.test.tsx`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/skill-installer.test.ts --testNamePattern="SkillInstaller.installFromGithub"`
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/skill-installer-repo.test.ts tests/unit/main/skill-installer-platform.test.ts tests/unit/stores/skill.store.test.ts tests/unit/components/skill-store-remote.test.tsx`
 - `pnpm --filter @prompthub/desktop lint`
 - `pnpm --filter @prompthub/desktop typecheck`
 

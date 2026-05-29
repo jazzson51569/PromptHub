@@ -16,6 +16,8 @@ export interface Skill {
   author?: string;
   source_url?: string; // GitHub URL or registry source
   source_id?: string; // Stable source identity for same-name variants
+  logical_name?: string; // Stable logical skill grouping name
+  variant_key?: string; // Stable per-variant key within a logical skill
   local_repo_path?: string; // Absolute path to the cloned/saved local repo directory
   directory_fingerprint?: string; // Stable fingerprint of the full skill directory
   tags?: string[]; // stored as JSON string in DB, parsed array in runtime

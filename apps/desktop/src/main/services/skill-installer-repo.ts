@@ -7,9 +7,11 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import type {
+  Skill,
   SkillLocalFileEntry,
   SkillLocalFileTreeEntry,
 } from "@prompthub/shared/types";
+import { computeStableTextHash } from "@prompthub/shared/utils/skill-identity";
 import {
   fileExists,
   getErrorCode,
@@ -80,10 +82,127 @@ const TEXT_EXTENSIONS = new Set([
 
 const INTERNAL_REPO_DIRS = new Set([".git", ".prompthub"]);
 
+interface SkillVariantSourceMetadata {
+  logicalName: string;
+  variantKey: string;
+  sourceType: string;
+  sourceId?: string;
+  sourceUrl?: string;
+  sourceLabel?: string;
+  branch?: string;
+  directory?: string;
+  directoryFingerprint?: string;
+}
+
+interface SkillVariantMetadata {
+  logicalName: string;
+  variantKey: string;
+  repoMode: "copy" | "symlink";
+  createdAt: number;
+  updatedAt: number;
+}
+
+const MANAGED_REPO_DIRNAME = "repo";
+const INTERNAL_METADATA_DIRNAME = ".prompthub";
+const SOURCE_METADATA_FILE = "source.json";
+const VARIANT_METADATA_FILE = "variant.json";
+
 function normalizeRepoBaseDirectory(absolutePath: string): string {
   return /[\\/]SKILL\.md$/i.test(absolutePath)
     ? path.dirname(absolutePath)
     : absolutePath;
+}
+
+function normalizeLogicalSkillName(value?: string | null): string {
+  const trimmed = (value ?? "").trim().toLowerCase();
+  const normalized = trimmed
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "skill";
+}
+
+function normalizeVariantLabel(value?: string | null): string {
+  if (!value) {
+    return "local";
+  }
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return normalized || "local";
+}
+
+function buildVariantKeyFromSkill(skill: Pick<Skill, "id" | "name" | "source_id" | "variant_key">): string {
+  if (skill.variant_key?.trim()) {
+    return skill.variant_key.trim();
+  }
+
+  const logicalName = normalizeLogicalSkillName(skill.name || skill.id);
+  const stableSuffix = computeStableTextHash(skill.source_id?.trim() || skill.id.trim()).slice(0, 8);
+  return `${logicalName}--${stableSuffix}`;
+}
+
+function buildSkillVariantSourceMetadata(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
+  mode: "copy" | "symlink",
+): { source: SkillVariantSourceMetadata; variant: SkillVariantMetadata } {
+  const logicalName =
+    skill.logical_name?.trim() || normalizeLogicalSkillName(skill.name || skill.id);
+  const variantKey = buildVariantKeyFromSkill(skill);
+  const timestamp = Date.now();
+  return {
+    source: {
+      logicalName,
+      variantKey,
+      sourceType: skill.source_id ? "managed-import" : "local-authored",
+      sourceId: skill.source_id,
+      sourceUrl: skill.source_url,
+      directoryFingerprint: skill.directory_fingerprint,
+    },
+    variant: {
+      logicalName,
+      variantKey,
+      repoMode: mode,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    },
+  };
+}
+
+function getManagedContainerPathFromInstanceKey(instanceKey: string): string {
+  const skillsDir = getSkillsDirAccessor();
+  return path.join(skillsDir, instanceKey);
+}
+
+async function writeVariantSidecarFiles(
+  containerDir: string,
+  metadata: { source: SkillVariantSourceMetadata; variant: SkillVariantMetadata },
+): Promise<void> {
+  const internalDir = path.join(containerDir, INTERNAL_METADATA_DIRNAME);
+  await fs.mkdir(internalDir, { recursive: true });
+  await fs.writeFile(
+    path.join(internalDir, SOURCE_METADATA_FILE),
+    `${JSON.stringify(metadata.source, null, 2)}\n`,
+    "utf-8",
+  );
+  await fs.writeFile(
+    path.join(internalDir, VARIANT_METADATA_FILE),
+    `${JSON.stringify(metadata.variant, null, 2)}\n`,
+    "utf-8",
+  );
+}
+
+async function resolveManagedRepoRoot(absolutePath: string): Promise<string> {
+  const normalized = normalizeRepoBaseDirectory(absolutePath);
+  const repoCandidate = path.join(normalized, MANAGED_REPO_DIRNAME);
+  if (await fileExists(repoCandidate)) {
+    const stat = await fs.stat(repoCandidate).catch(() => null);
+    if (stat?.isDirectory()) {
+      return repoCandidate;
+    }
+  }
+  return normalized;
 }
 
 export function isInternalSkillRepoEntry(relativePath: string): boolean {
@@ -185,7 +304,9 @@ export async function isManagedRepoPath(
 ): Promise<boolean> {
   const skillsDir = getSkillsDirAccessor();
   const normalizedSkillsDir = await normalizeExistingPath(skillsDir);
-  const normalizedAbsolutePath = await normalizeExistingPath(absolutePath);
+  const normalizedAbsolutePath = await normalizeExistingPath(
+    await resolveManagedRepoRoot(absolutePath),
+  );
   return isPathWithin(normalizedSkillsDir, normalizedAbsolutePath);
 }
 
@@ -685,7 +806,6 @@ export function getLocalRepoPath(skillName: string): string {
 }
 
 export function getLocalRepoPathForSkillId(skillId: string): string {
-  const skillsDir = getSkillsDirAccessor();
   const normalizedSkillId = skillId.trim();
   if (!normalizedSkillId) {
     throw new Error("Skill id cannot be empty");
@@ -693,15 +813,47 @@ export function getLocalRepoPathForSkillId(skillId: string): string {
   if (normalizedSkillId.includes("/") || normalizedSkillId.includes("\\")) {
     throw new Error("Skill id must not contain path separators");
   }
-  return path.join(skillsDir, normalizedSkillId);
+  return path.join(
+    getManagedContainerPathFromInstanceKey(normalizedSkillId),
+    MANAGED_REPO_DIRNAME,
+  );
+}
+
+export function getLocalRepoContainerPathForSkillId(skillId: string): string {
+  const normalizedSkillId = skillId.trim();
+  if (!normalizedSkillId) {
+    throw new Error("Skill id cannot be empty");
+  }
+  if (normalizedSkillId.includes("/") || normalizedSkillId.includes("\\")) {
+    throw new Error("Skill id must not contain path separators");
+  }
+  return getManagedContainerPathFromInstanceKey(normalizedSkillId);
+}
+
+export async function ensureManagedVariantContainer(
+  skill: Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
+  mode: "copy" | "symlink",
+): Promise<{ containerDir: string; repoDir: string }> {
+  const containerDir = getLocalRepoContainerPathForSkillId(skill.id);
+  const repoDir = getLocalRepoPathForSkillId(skill.id);
+  await initSkillsDir();
+  await fs.mkdir(containerDir, { recursive: true });
+  await writeVariantSidecarFiles(containerDir, buildSkillVariantSourceMetadata(skill, mode));
+  return { containerDir, repoDir };
 }
 
 export async function saveToLocalRepoBySkillId(
-  skillId: string,
+  skillOrId:
+    | string
+    | Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
   sourceDir: string,
   mode: "copy" | "symlink" = "copy",
 ): Promise<string> {
-  const destDir = getLocalRepoPathForSkillId(skillId);
+  const skill =
+    typeof skillOrId === "string"
+      ? ({ id: skillOrId, name: skillOrId } as Pick<Skill, "id" | "name">)
+      : skillOrId;
+  const { containerDir, repoDir } = await ensureManagedVariantContainer(skill, mode);
   const sourceStat = await fs.stat(sourceDir).catch((error: unknown) => {
     if (getErrorCode(error) === "ENOENT") {
       throw new Error(`Invalid sourceDir: directory does not exist: ${sourceDir}`);
@@ -712,18 +864,17 @@ export async function saveToLocalRepoBySkillId(
     throw new Error(`Invalid sourceDir: not a directory: ${sourceDir}`);
   }
 
-  await initSkillsDir();
-  if (await fileExists(destDir)) {
-    await fs.rm(destDir, { recursive: true, force: true });
+  if (await fileExists(repoDir)) {
+    await fs.rm(repoDir, { recursive: true, force: true });
   }
 
   if (mode === "symlink") {
     const canonicalSourceDir = await fs.realpath(sourceDir);
-    await fs.symlink(canonicalSourceDir, destDir, "dir");
-    return destDir;
+    await fs.symlink(canonicalSourceDir, repoDir, "dir");
+    return repoDir;
   }
 
-  await fs.cp(sourceDir, destDir, {
+  await fs.cp(sourceDir, repoDir, {
     recursive: true,
     filter: async (src: string) => {
       try {
@@ -735,18 +886,31 @@ export async function saveToLocalRepoBySkillId(
     },
   });
 
-  return destDir;
+  await writeVariantSidecarFiles(
+    containerDir,
+    buildSkillVariantSourceMetadata(skill, mode),
+  );
+  return repoDir;
 }
 
 export async function saveContentToLocalRepoBySkillId(
-  skillId: string,
+  skillOrId:
+    | string
+    | Pick<Skill, "id" | "name" | "source_id" | "source_url" | "directory_fingerprint" | "logical_name" | "variant_key">,
   content: string,
 ): Promise<string> {
-  const destDir = getLocalRepoPathForSkillId(skillId);
-  await initSkillsDir();
-  await fs.mkdir(destDir, { recursive: true });
-  await fs.writeFile(path.join(destDir, "SKILL.md"), content, "utf-8");
-  return destDir;
+  const skill =
+    typeof skillOrId === "string"
+      ? ({ id: skillOrId, name: skillOrId } as Pick<Skill, "id" | "name">)
+      : skillOrId;
+  const { containerDir, repoDir } = await ensureManagedVariantContainer(skill, "copy");
+  await fs.mkdir(repoDir, { recursive: true });
+  await fs.writeFile(path.join(repoDir, "SKILL.md"), content, "utf-8");
+  await writeVariantSidecarFiles(
+    containerDir,
+    buildSkillVariantSourceMetadata(skill, "copy"),
+  );
+  return repoDir;
 }
 
 export async function renameManagedLocalRepo(

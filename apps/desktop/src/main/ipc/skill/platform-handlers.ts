@@ -238,7 +238,6 @@ export function registerSkillPlatformHandlers(context: SkillIPCContext): void {
         platformId,
         repoPath ?? undefined,
         {
-          platformSkillName: SkillInstaller.buildPlatformSkillInstallName(skill),
           legacySkillNames: [skill.name],
         },
       );

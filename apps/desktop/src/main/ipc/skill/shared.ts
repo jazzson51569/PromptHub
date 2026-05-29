@@ -45,7 +45,7 @@ export async function ensureLocalRepoPath(
       const externalRepoStat = await fs.stat(skill.local_repo_path);
       if (externalRepoStat.isDirectory()) {
         const savedRepoPath = await SkillInstaller.saveToLocalRepoBySkillId(
-          skill.id,
+          skill,
           skill.local_repo_path,
         );
         if (skill.local_repo_path !== savedRepoPath) {
@@ -64,7 +64,7 @@ export async function ensureLocalRepoPath(
   }
 
   const savedRepoPath = await SkillInstaller.saveContentToLocalRepoBySkillId(
-    skill.id,
+    skill,
     repoContent,
   );
   if (skill.local_repo_path !== savedRepoPath) {

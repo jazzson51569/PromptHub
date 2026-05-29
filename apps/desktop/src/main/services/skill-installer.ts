@@ -95,7 +95,6 @@ import {
   writeLocalRepoFileByPath,
 } from "./skill-installer-repo";
 import {
-  buildPlatformSkillInstallName,
   detectInstalledPlatforms,
   getSkillMdInstallStatusForSkill,
   getPlatformStatus,
@@ -170,7 +169,6 @@ export class SkillInstaller {
   static installToPlatform = installToPlatform;
   static uninstallFromPlatform = uninstallFromPlatform;
   static getPlatformStatus = getPlatformStatus;
-  static buildPlatformSkillInstallName = buildPlatformSkillInstallName;
   static getSupportedPlatforms = getSupportedPlatforms;
   static detectInstalledPlatforms = detectInstalledPlatforms;
   static installSkillMd = installSkillMd;
@@ -347,7 +345,8 @@ export class SkillInstaller {
         );
       }
 
-      // Create Skill in DB
+      // Create Skill in DB first, then move the cloned repo into the managed
+      // variant container so all My Skills entries share one disk layout.
       const skill = db.create({
         name: manifest.name || repoName,
         description: manifest.description || `Installed from ${url}`,
@@ -357,11 +356,16 @@ export class SkillInstaller {
         instructions: manifest.instructions || "",
         protocol_type: "skill",
         source_url: url,
-        local_repo_path: skillDir,
+        local_repo_path: installDir,
         is_favorite: false,
         tags: [],
         original_tags: manifest.tags || ["github"],
       });
+
+      const managedRepoPath = await saveToLocalRepoBySkillId(skill, skillDir);
+      if (managedRepoPath !== skill.local_repo_path) {
+        db.update(skill.id, { local_repo_path: managedRepoPath });
+      }
 
       return skill.id;
     } catch (error) {
@@ -492,17 +496,6 @@ export class SkillInstaller {
     );
 
     // Save files first, then create DB record to avoid orphaned records
-    let localRepoPath: string | undefined;
-    if (options?.repoSourceDir) {
-      localRepoPath = await saveToLocalRepo(
-        skillName,
-        options.repoSourceDir,
-        options.repoImportMode,
-      );
-    } else {
-      localRepoPath = await saveContentToLocalRepo(skillName, skillContent);
-    }
-
     const createdSkill = db.create({
       name: sanitized.name!,
       description: sanitized.description,
@@ -515,8 +508,26 @@ export class SkillInstaller {
       original_tags: sanitized.tags,
       is_favorite: false,
       source_url: sanitized.source_url,
-      local_repo_path: localRepoPath || sanitized.local_repo_path,
+      local_repo_path: sanitized.local_repo_path,
     });
+
+    let localRepoPath: string | undefined;
+    if (options?.repoSourceDir) {
+      localRepoPath = await saveToLocalRepoBySkillId(
+        createdSkill,
+        options.repoSourceDir,
+        options.repoImportMode,
+      );
+    } else {
+      localRepoPath = await saveContentToLocalRepoBySkillId(
+        createdSkill,
+        skillContent,
+      );
+    }
+
+    if (localRepoPath && createdSkill.local_repo_path !== localRepoPath) {
+      db.update(createdSkill.id, { local_repo_path: localRepoPath });
+    }
 
     return createdSkill.id;
   }

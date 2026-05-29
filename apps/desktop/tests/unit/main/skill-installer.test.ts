@@ -1910,9 +1910,12 @@ describe("SkillInstaller.installFromGithub", () => {
     const mockDb = {
       getByName: vi.fn().mockReturnValue(null),
       create: vi.fn().mockReturnValue({ id: "skill-gitea" }),
+      update: vi.fn(),
     } as unknown as SkillDB;
 
-    vi.spyOn(skillInstallerUtils, "gitClone").mockResolvedValue(undefined);
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(async (_url, destDir) => {
+      await fs.mkdir(destDir, { recursive: true });
+    });
     vi.spyOn(SkillInstaller, "resolveSingleSkillDirFromRepo").mockResolvedValue(
       path.join(managedSkillsDir(), "icelemon-skills"),
     );
@@ -1964,9 +1967,12 @@ describe("SkillInstaller.installFromGithub", () => {
     const mockDb = {
       getByName: vi.fn().mockReturnValue(null),
       create: vi.fn().mockReturnValue({ id: "skill-1" }),
+      update: vi.fn(),
     } as unknown as SkillDB;
 
-    vi.spyOn(skillInstallerUtils, "gitClone").mockResolvedValue(undefined);
+    vi.spyOn(skillInstallerUtils, "gitClone").mockImplementation(async (_url, destDir) => {
+      await fs.mkdir(destDir, { recursive: true });
+    });
     vi.spyOn(SkillInstaller, "resolveSingleSkillDirFromRepo").mockResolvedValue(
       path.join(managedSkillsDir(), "owner-repo"),
     );

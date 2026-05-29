@@ -29,7 +29,7 @@ async function resolveManagedRepoPath(
     return ensuredRepoPath;
   }
 
-  const managedRepoPath = SkillInstaller.getLocalRepoPath(skill.name);
+  const managedRepoPath = SkillInstaller.getLocalRepoPathForSkillId(skill.id);
   if (skill.local_repo_path !== managedRepoPath) {
     context.db.update(skillId, { local_repo_path: managedRepoPath });
   }
@@ -108,7 +108,11 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
       if (mode && mode !== "copy" && mode !== "symlink") {
         throw new Error("skill:saveToRepo mode must be copy or symlink");
       }
-      return SkillInstaller.saveToLocalRepoBySkillId(skillId, sourceDir, mode);
+      const skill = db.getById(skillId);
+      if (!skill) {
+        throw new Error(`Skill not found: ${skillId}`);
+      }
+      return SkillInstaller.saveToLocalRepoBySkillId(skill, sourceDir, mode);
     },
   );
 
