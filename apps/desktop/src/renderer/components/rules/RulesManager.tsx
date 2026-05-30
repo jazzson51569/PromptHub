@@ -27,6 +27,20 @@ import { PlatformIcon } from "../ui/PlatformIcon";
 import { generateTextDiff } from "../skill/detail-utils";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 
+function getParentDirectory(filePath: string): string {
+  const normalized = filePath.replace(/[\\/]+$/, "");
+  const separatorIndex = Math.max(
+    normalized.lastIndexOf("/"),
+    normalized.lastIndexOf("\\"),
+  );
+
+  if (separatorIndex <= 0) {
+    return normalized;
+  }
+
+  return normalized.slice(0, separatorIndex);
+}
+
 export function RulesManager() {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -44,6 +58,7 @@ export function RulesManager() {
   const setDraftContent = useRulesStore((state) => state.setDraftContent);
   const setAiInstruction = useRulesStore((state) => state.setAiInstruction);
   const saveCurrentRule = useRulesStore((state) => state.saveCurrentRule);
+  const resolveCurrentRuleConflict = useRulesStore((state) => state.resolveCurrentRuleConflict);
   const rewriteCurrentRule = useRulesStore((state) => state.rewriteCurrentRule);
   const deleteRuleVersion = useRulesStore((state) => state.deleteRuleVersion);
 
@@ -51,6 +66,9 @@ export function RulesManager() {
   const VISIBLE_SNAPSHOTS_LIMIT = 5;
   const [deleteConfirm, setDeleteConfirm] = useState<{ ruleId: string; versionId: string } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [dismissedConflictRuleId, setDismissedConflictRuleId] = useState<RuleFileId | null>(null);
+  const [isResolvingConflict, setIsResolvingConflict] = useState(false);
+  const [pendingConflictStrategy, setPendingConflictStrategy] = useState<"use-managed" | "use-target" | null>(null);
 
   useEffect(() => {
     if (!hasLoadedFiles) {
@@ -61,7 +79,15 @@ export function RulesManager() {
   useEffect(() => {
     setSelectedVersionId(null);
     setShowAllVersions(false);
+    setDismissedConflictRuleId(null);
   }, [currentFile?.id]);
+
+  const syncConflictFile =
+    currentFile?.syncStatus === "out-of-sync" &&
+    typeof currentFile.targetContent === "string" &&
+    dismissedConflictRuleId !== currentFile.id
+      ? currentFile
+      : null;
 
   useEffect(() => {
     if (
@@ -146,6 +172,43 @@ export function RulesManager() {
     }
   };
 
+  const handleOpenLocation = async () => {
+    if (!currentFile?.path) {
+      return;
+    }
+
+    const result = await window.electron?.openPath?.(getParentDirectory(currentFile.path));
+    if (result && !result.success) {
+      showToast(result.error || t("rules.openLocationFailed", "Failed to open location"), "error");
+    }
+  };
+
+  const handleResolveConflict = async (
+    strategy: "use-managed" | "use-target",
+  ) => {
+    setIsResolvingConflict(true);
+    try {
+      await resolveCurrentRuleConflict(strategy);
+      setDismissedConflictRuleId(currentFile?.id ?? null);
+      showToast(
+        strategy === "use-managed"
+          ? t("rules.conflictResolvedUseManaged", "Kept the PromptHub version and synced it to the external file")
+          : t("rules.conflictResolvedUseTarget", "Kept the external file version and synced it to PromptHub"),
+        "success",
+      );
+    } catch (resolveError) {
+      showToast(
+        resolveError instanceof Error
+          ? resolveError.message
+          : t("rules.conflictResolveFailed", "Failed to resolve rule conflict"),
+        "error",
+      );
+    } finally {
+      setIsResolvingConflict(false);
+      setPendingConflictStrategy(null);
+    }
+  };
+
   const handleAiRewrite = async () => {
     try {
       await rewriteCurrentRule();
@@ -194,9 +257,10 @@ export function RulesManager() {
               {currentFile?.path ? (
                 <button
                   type="button"
-                  onClick={() => void window.electron?.openPath?.(currentFile.path)}
+                  onClick={() => void handleOpenLocation()}
                   className="shrink-0 rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                   title={t("rules.openLocation", "Open Location")}
+                  aria-label={t("rules.openLocation", "Open Location")}
                 >
                   <FolderOpenIcon className="h-4 w-4" />
                 </button>
@@ -637,6 +701,109 @@ export function RulesManager() {
       cancelText={t("common.cancel")}
       variant="destructive"
       isLoading={isDeleting}
+    />
+    {syncConflictFile ? (
+      <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4">
+        <div
+          className="absolute inset-0 bg-background/60 backdrop-blur-sm"
+          onClick={() => setDismissedConflictRuleId(syncConflictFile.id)}
+        />
+        <div className="relative w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-base">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              <AlertCircleIcon className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-foreground">
+                {t("rules.conflictTitle", "External rule file changed")}
+              </h3>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {t(
+                  "rules.conflictMessage",
+                  "The external file no longer matches PromptHub's managed copy. Choose which version to keep as the source of truth. The other version will be overwritten after confirmation.",
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 text-xs md:grid-cols-2">
+            <div className="min-h-0 rounded-lg border border-border bg-background p-3">
+              <div className="mb-2 font-medium text-foreground">
+                {t("rules.conflictPromptHubVersion", "PromptHub version")}
+              </div>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-muted-foreground">
+                {syncConflictFile.content || t("rules.emptyHint", "Rule content will appear here.")}
+              </pre>
+            </div>
+            <div className="min-h-0 rounded-lg border border-border bg-background p-3">
+              <div className="mb-2 font-medium text-foreground">
+                {t("rules.conflictExternalVersion", "External file version")}
+              </div>
+              <pre className="max-h-40 overflow-auto whitespace-pre-wrap break-words text-muted-foreground">
+                {syncConflictFile.targetContent || t("rules.emptyHint", "Rule content will appear here.")}
+              </pre>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={() => setDismissedConflictRuleId(syncConflictFile.id)}
+              disabled={isResolvingConflict}
+              className="h-10 rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingConflictStrategy("use-managed")}
+              disabled={isResolvingConflict}
+              className="h-10 rounded-lg border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+            >
+              {t("rules.conflictUseManaged", "Keep PromptHub version")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingConflictStrategy("use-target")}
+              disabled={isResolvingConflict}
+              className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+            >
+              {isResolvingConflict
+                ? t("common.saving", "Saving...")
+                : t("rules.conflictUseTarget", "Keep external file version")}
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    <ConfirmDialog
+      isOpen={pendingConflictStrategy !== null}
+      onClose={() => setPendingConflictStrategy(null)}
+      onConfirm={() => {
+        if (!pendingConflictStrategy) return;
+        void handleResolveConflict(pendingConflictStrategy);
+      }}
+      title={
+        pendingConflictStrategy === "use-managed"
+          ? t("rules.conflictConfirmUseManagedTitle", "Keep PromptHub version?")
+          : t("rules.conflictConfirmUseTargetTitle", "Keep external file version?")
+      }
+      message={
+        pendingConflictStrategy === "use-managed"
+          ? t(
+              "rules.conflictConfirmUseManagedMessage",
+              "PromptHub's managed copy will become the source of truth and overwrite the external rule file.",
+            )
+          : t(
+              "rules.conflictConfirmUseTargetMessage",
+              "The external rule file will become the source of truth and overwrite PromptHub's managed copy.",
+            )
+      }
+      confirmText={
+        pendingConflictStrategy === "use-managed"
+          ? t("rules.conflictConfirmUseManagedAction", "Keep PromptHub version")
+          : t("rules.conflictConfirmUseTargetAction", "Keep external version")
+      }
+      cancelText={t("common.cancel")}
+      isLoading={isResolvingConflict}
     />
     </>
   );

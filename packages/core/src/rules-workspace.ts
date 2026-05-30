@@ -13,6 +13,7 @@ import type {
   CreateRuleProjectInput,
   KnownRuleFileId,
   RuleBackupRecord,
+  RuleConflictResolutionStrategy,
   RuleFileContent,
   RuleFileDescriptor,
   RuleFileGroup,
@@ -102,6 +103,10 @@ export interface RulesWorkspaceService {
   resolveRuleMeta: (ruleId: RuleFileId) => Promise<StoredRuleMeta>;
   readRuleContent: (ruleId: RuleFileId) => Promise<RuleFileContent>;
   saveRuleContent: (ruleId: RuleFileId, content: string) => Promise<RuleFileContent>;
+  resolveRuleConflict: (
+    ruleId: RuleFileId,
+    strategy: RuleConflictResolutionStrategy,
+  ) => Promise<RuleFileContent>;
   deleteRuleVersion: (ruleId: RuleFileId, versionId: string) => Promise<RuleVersionSnapshot[]>;
   createProjectRule: (input: CreateRuleProjectInput) => Promise<RuleFileDescriptor>;
   bootstrapRuleWorkspace: () => Promise<void>;
@@ -788,22 +793,34 @@ export function createRulesWorkspaceService(
   }
 
   async function readRuleContent(ruleId: RuleFileId): Promise<RuleFileContent> {
-    const meta = await resolveCachedRuleMeta(ruleId);
-    const cachedRecord = getRuleDb().getById(ruleId);
-    const descriptor = cachedRecord ? descriptorFromRuleRecord(cachedRecord) : await buildDescriptor(meta);
+    const meta = await resolveRuleMeta(ruleId);
+    const syncStatus = await syncStatusForMeta(meta);
+    const nextMeta: StoredRuleMeta = {
+      ...meta,
+      syncStatus,
+    };
+    if (syncStatus !== meta.syncStatus) {
+      await writeMeta(nextMeta);
+    }
+    const descriptor = await buildDescriptor(nextMeta);
     const content = (await fileExists(meta.managedPath))
       ? await fsp.readFile(meta.managedPath, "utf-8")
       : descriptor.exists
         ? await fsp.readFile(meta.targetPath, "utf-8")
         : "";
+    const targetContent =
+      syncStatus === "out-of-sync" && (await fileExists(meta.targetPath))
+        ? await fsp.readFile(meta.targetPath, "utf-8")
+        : undefined;
     const versionRead = await readRuleVersions(ruleId);
-    if (versionRead.repaired) {
-      await syncRuleIndexWithData(meta, content, versionRead.index);
+    if (versionRead.repaired || syncStatus !== meta.syncStatus) {
+      await syncRuleIndexWithData(nextMeta, content, versionRead.index);
     }
 
     return {
       ...descriptor,
       content,
+      targetContent,
       versions: versionRead.versions,
     };
   }
@@ -834,6 +851,62 @@ export function createRulesWorkspaceService(
     return {
       ...descriptor,
       content,
+      versions: versionWrite.versions,
+    };
+  }
+
+  async function resolveRuleConflict(
+    ruleId: RuleFileId,
+    strategy: RuleConflictResolutionStrategy,
+  ): Promise<RuleFileContent> {
+    if (strategy !== "use-managed" && strategy !== "use-target") {
+      throw new Error(`Unknown rule conflict resolution strategy: ${strategy}`);
+    }
+
+    const meta = await resolveRuleMeta(ruleId);
+    const managedContent = (await fileExists(meta.managedPath))
+      ? await fsp.readFile(meta.managedPath, "utf-8")
+      : "";
+
+    if (strategy === "use-managed") {
+      const syncStatus = await writeTargetRule(meta, managedContent);
+      const nextMeta: StoredRuleMeta = {
+        ...meta,
+        syncStatus,
+        updatedAt: new Date().toISOString(),
+      };
+      const versionRead = await readRuleVersions(ruleId);
+      await writeMeta(nextMeta);
+      await syncRuleIndexWithData(nextMeta, managedContent, versionRead.index);
+
+      const descriptor = await buildDescriptor(nextMeta);
+      return {
+        ...descriptor,
+        content: managedContent,
+        versions: versionRead.versions,
+      };
+    }
+
+    if (!(await fileExists(meta.targetPath))) {
+      throw new Error(`Cannot resolve rule conflict because target file is missing: ${meta.targetPath}`);
+    }
+
+    const targetContent = await fsp.readFile(meta.targetPath, "utf-8");
+    await writeManagedRule(meta, targetContent);
+    const versionWrite = await appendRuleVersion(ruleId, targetContent, "manual-save");
+    const nextMeta: StoredRuleMeta = {
+      ...meta,
+      syncStatus: await syncStatusForMeta(meta),
+      updatedAt: new Date().toISOString(),
+    };
+
+    await writeMeta(nextMeta);
+    await syncRuleIndexWithData(nextMeta, targetContent, versionWrite.index);
+
+    const descriptor = await buildDescriptor(nextMeta);
+    return {
+      ...descriptor,
+      content: targetContent,
       versions: versionWrite.versions,
     };
   }
@@ -1063,6 +1136,7 @@ export function createRulesWorkspaceService(
     resolveRuleMeta,
     readRuleContent,
     saveRuleContent,
+    resolveRuleConflict,
     deleteRuleVersion,
     createProjectRule,
     bootstrapRuleWorkspace,

@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type {
   CreateRuleProjectInput,
   RuleBackupRecord,
+  RuleConflictResolutionStrategy,
   RuleFileContent,
   RuleFileDescriptor,
   RuleFileId,
@@ -20,6 +21,11 @@ export const rulesApi = {
     ipcRenderer.invoke(IPC_CHANNELS.RULES_READ, ruleId),
   save: (ruleId: RuleFileId, content: string): Promise<RuleFileContent> =>
     ipcRenderer.invoke(IPC_CHANNELS.RULES_SAVE, ruleId, content),
+  resolveConflict: (
+    ruleId: RuleFileId,
+    strategy: RuleConflictResolutionStrategy,
+  ): Promise<RuleFileContent> =>
+    ipcRenderer.invoke(IPC_CHANNELS.RULES_RESOLVE_CONFLICT, ruleId, strategy),
   rewrite: (payload: RuleRewriteRequest): Promise<RuleRewriteResult> =>
     ipcRenderer.invoke(IPC_CHANNELS.RULES_REWRITE, payload),
   addProject: (input: CreateRuleProjectInput): Promise<RuleFileDescriptor> =>

@@ -17,6 +17,7 @@ import {
   listRuleDescriptors,
   readRuleContent,
   removeProjectRule,
+  resolveRuleConflict,
   saveRuleContent,
 } from "../../../src/main/services/rules-workspace";
 import { getPlatformGlobalRulePath } from "../../../src/main/services/skill-installer-utils";
@@ -118,6 +119,67 @@ describe("rules workspace storage", () => {
     const content = await readRuleContent("project:docs-site");
     expect(content.versions).toHaveLength(1);
     expect(content.versions[0].content).toContain("Updated docs rule");
+  });
+
+  it("reports external target edits as out-of-sync with both file versions", async () => {
+    const projectRoot = path.join(tempDir, "docs-site");
+    fs.mkdirSync(projectRoot, { recursive: true });
+
+    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await saveRuleContent("project:docs-site", "# PromptHub copy");
+
+    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Edited outside PromptHub", "utf8");
+
+    const content = await readRuleContent("project:docs-site");
+
+    expect(content.syncStatus).toBe("out-of-sync");
+    expect(content.content).toBe("# PromptHub copy");
+    expect(content.targetContent).toBe("# Edited outside PromptHub");
+  });
+
+  it("resolves external target edits by importing the target file into the managed copy", async () => {
+    const projectRoot = path.join(tempDir, "docs-site");
+    fs.mkdirSync(projectRoot, { recursive: true });
+
+    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await saveRuleContent("project:docs-site", "# PromptHub copy");
+    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Edited outside PromptHub", "utf8");
+
+    const resolved = await resolveRuleConflict(
+      "project:docs-site",
+      "use-target",
+    );
+
+    expect(resolved.syncStatus).toBe("synced");
+    expect(resolved.content).toBe("# Edited outside PromptHub");
+    expect(resolved.targetContent).toBeUndefined();
+
+    const managedPath = path.join(getRulesDir(), "projects", "docs-site__docs-site", "AGENTS.md");
+    expect(fs.readFileSync(managedPath, "utf8")).toBe("# Edited outside PromptHub");
+    expect(fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8")).toBe(
+      "# Edited outside PromptHub",
+    );
+  });
+
+  it("resolves external target edits by writing the managed copy back to the target file", async () => {
+    const projectRoot = path.join(tempDir, "docs-site");
+    fs.mkdirSync(projectRoot, { recursive: true });
+
+    await createProjectRule({ id: "docs-site", name: "Docs Site", rootPath: projectRoot });
+    await saveRuleContent("project:docs-site", "# PromptHub copy");
+    fs.writeFileSync(path.join(projectRoot, "AGENTS.md"), "# Edited outside PromptHub", "utf8");
+
+    const resolved = await resolveRuleConflict(
+      "project:docs-site",
+      "use-managed",
+    );
+
+    expect(resolved.syncStatus).toBe("synced");
+    expect(resolved.content).toBe("# PromptHub copy");
+    expect(resolved.targetContent).toBeUndefined();
+    expect(fs.readFileSync(path.join(projectRoot, "AGENTS.md"), "utf8")).toBe(
+      "# PromptHub copy",
+    );
   });
 
   it("removes a project rule from files and SQLite index", async () => {

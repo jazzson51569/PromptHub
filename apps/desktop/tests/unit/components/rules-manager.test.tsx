@@ -94,7 +94,98 @@ describe("RulesManager", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Open Location" }));
 
-    expect(electron.openPath).toHaveBeenCalledWith("/tmp/docs-site/AGENTS.md");
+    expect(electron.openPath).toHaveBeenCalledWith("/tmp/docs-site");
+  });
+
+  it("prompts for a sync direction when the external rule file changed", async () => {
+    const resolveConflict = vi.fn().mockResolvedValue({
+      id: "project:docs-site",
+      platformId: "workspace",
+      platformName: "Docs Site",
+      platformIcon: "FolderRoot",
+      platformDescription: "Project rules",
+      name: "AGENTS.md",
+      description: "Docs site rules",
+      path: "/tmp/docs-site/AGENTS.md",
+      exists: true,
+      group: "workspace",
+      syncStatus: "synced",
+      content: "# External edit",
+      versions: [],
+    });
+    const { api } = installWindowMocks({
+      api: {
+        rules: {
+          list: vi.fn().mockResolvedValue([
+            {
+              id: "project:docs-site",
+              platformId: "workspace",
+              platformName: "Docs Site",
+              platformIcon: "FolderRoot",
+              platformDescription: "Project rules",
+              name: "AGENTS.md",
+              description: "Docs site rules",
+              path: "/tmp/docs-site/AGENTS.md",
+              exists: true,
+              group: "workspace",
+              syncStatus: "out-of-sync",
+            },
+          ]),
+          read: vi.fn().mockResolvedValue({
+            id: "project:docs-site",
+            platformId: "workspace",
+            platformName: "Docs Site",
+            platformIcon: "FolderRoot",
+            platformDescription: "Project rules",
+            name: "AGENTS.md",
+            description: "Docs site rules",
+            path: "/tmp/docs-site/AGENTS.md",
+            exists: true,
+            group: "workspace",
+            syncStatus: "out-of-sync",
+            content: "# PromptHub copy",
+            targetContent: "# External edit",
+            versions: [],
+          }),
+          resolveConflict,
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(<RulesManager />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("External rule file changed")).toBeInTheDocument();
+      expect(screen.getAllByText("# PromptHub copy").length).toBeGreaterThan(0);
+      expect(screen.getByText("# External edit")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep external file version" }));
+
+    expect(api.rules.resolveConflict).not.toHaveBeenCalled();
+    expect(screen.getByText("Keep external file version?")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "The external rule file will become the source of truth and overwrite PromptHub's managed copy.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep external version" }));
+
+    await waitFor(() => {
+      expect(api.rules.resolveConflict).toHaveBeenCalledWith(
+        "project:docs-site",
+        "use-target",
+      );
+      expect(screen.queryByText("External rule file changed")).not.toBeInTheDocument();
+    });
+
+    expect(showToast).toHaveBeenCalledWith(
+      "Kept the external file version and synced it to PromptHub",
+      "success",
+    );
   });
 
   it("rewrites a rule draft with AI and then saves the updated content", async () => {

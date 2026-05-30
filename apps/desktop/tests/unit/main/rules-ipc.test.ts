@@ -9,6 +9,7 @@ const listRuleDescriptorsMock = vi.fn();
 const scanRuleDescriptorsMock = vi.fn();
 const readRuleContentMock = vi.fn();
 const saveRuleContentMock = vi.fn();
+const resolveRuleConflictMock = vi.fn();
 const createProjectRuleMock = vi.fn();
 const removeProjectRuleMock = vi.fn();
 const importRuleBackupRecordsMock = vi.fn();
@@ -26,6 +27,7 @@ vi.mock("../../../src/main/services/rules-workspace", () => ({
   scanRuleDescriptors: scanRuleDescriptorsMock,
   readRuleContent: readRuleContentMock,
   saveRuleContent: saveRuleContentMock,
+  resolveRuleConflict: resolveRuleConflictMock,
   createProjectRule: createProjectRuleMock,
   removeProjectRule: removeProjectRuleMock,
   importRuleBackupRecords: importRuleBackupRecordsMock,
@@ -63,6 +65,7 @@ describe("rules IPC", () => {
     scanRuleDescriptorsMock.mockReset();
     readRuleContentMock.mockReset();
     saveRuleContentMock.mockReset();
+    resolveRuleConflictMock.mockReset();
     createProjectRuleMock.mockReset();
     removeProjectRuleMock.mockReset();
     importRuleBackupRecordsMock.mockReset();
@@ -122,6 +125,41 @@ describe("rules IPC", () => {
     await expect(
       handlers[IPC_CHANNELS.RULES_IMPORT_RECORDS](null, { bad: true }),
     ).rejects.toThrow("rules:importRecords requires an array payload");
+
+    await expect(
+      handlers[IPC_CHANNELS.RULES_RESOLVE_CONFLICT](null, "", "use-target"),
+    ).rejects.toThrow("rules:resolveConflict requires a ruleId");
+
+    await expect(
+      handlers[IPC_CHANNELS.RULES_RESOLVE_CONFLICT](null, "claude-global", "bad"),
+    ).rejects.toThrow("rules:resolveConflict requires a valid strategy");
+  });
+
+  it("resolves rule conflicts through workspace services", async () => {
+    resolveRuleConflictMock.mockResolvedValue({
+      id: "project:docs-site",
+      content: "# External",
+      syncStatus: "synced",
+    });
+    const { handlers, IPC_CHANNELS } = await setupRulesIpc();
+
+    await expect(
+      handlers[IPC_CHANNELS.RULES_RESOLVE_CONFLICT](
+        null,
+        "project:docs-site",
+        "use-target",
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: "project:docs-site",
+        syncStatus: "synced",
+      }),
+    );
+
+    expect(resolveRuleConflictMock).toHaveBeenCalledWith(
+      "project:docs-site",
+      "use-target",
+    );
   });
 
   it("creates and removes project rules through workspace services", async () => {

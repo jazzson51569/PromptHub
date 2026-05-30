@@ -53,6 +53,7 @@ export const {
   resolveRuleMeta,
   readRuleContent,
   saveRuleContent,
+  resolveRuleConflict,
   deleteRuleVersion,
   createProjectRule,
   bootstrapRuleWorkspace,

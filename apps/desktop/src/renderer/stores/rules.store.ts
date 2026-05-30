@@ -4,6 +4,7 @@ import { scheduleAllSaveSync } from "../services/webdav-save-sync";
 import { getOrderedGlobalRuleFiles } from "../services/rule-platform-order";
 import type {
   CreateRuleProjectInput,
+  RuleConflictResolutionStrategy,
   RuleFileContent,
   RuleFileDescriptor,
   RuleFileId,
@@ -28,6 +29,7 @@ interface RulesState {
   setDraftContent: (content: string) => void;
   setAiInstruction: (instruction: string) => void;
   saveCurrentRule: () => Promise<void>;
+  resolveCurrentRuleConflict: (strategy: RuleConflictResolutionStrategy) => Promise<void>;
   rewriteCurrentRule: () => Promise<void>;
   deleteRuleVersion: (ruleId: RuleFileId, versionId: string) => Promise<void>;
   addProjectRule: (input: CreateRuleProjectInput) => Promise<void>;
@@ -193,6 +195,39 @@ export const useRulesStore = create<RulesState>((set, get) => ({
         isSaving: false,
       });
       scheduleAllSaveSync("rules:save");
+    } catch (error) {
+      set({ isSaving: false, error: getErrorMessage(error) });
+      throw error;
+    }
+  },
+
+  resolveCurrentRuleConflict: async (strategy) => {
+    const selectedRuleId = get().selectedRuleId;
+    if (!selectedRuleId) {
+      return;
+    }
+
+    set({ isSaving: true, error: null });
+    try {
+      const updated = await window.api.rules.resolveConflict(selectedRuleId, strategy);
+      const nextFiles = get().files.map((file) =>
+        file.id === updated.id
+          ? {
+              ...file,
+              exists: updated.exists,
+              path: updated.path,
+              syncStatus: updated.syncStatus,
+            }
+          : file,
+      );
+      set({
+        selectedRuleId: updated.id,
+        currentFile: updated,
+        files: nextFiles,
+        draftContent: updated.content,
+        isSaving: false,
+      });
+      scheduleAllSaveSync("rules:resolve-conflict");
     } catch (error) {
       set({ isSaving: false, error: getErrorMessage(error) });
       throw error;

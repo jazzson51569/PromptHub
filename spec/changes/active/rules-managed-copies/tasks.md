@@ -11,5 +11,7 @@
 - [x] 为 Rules 设计数据库 schema（`rules` / `rule_versions`）
 - [ ] 处理旧版 `rule-history` 与文件直读模型的迁移
 - [x] 为同步状态、冲突导入、部署动作补充 UI/IPC 文案与测试
+- [x] 修复 Rules 详情“打开位置”按钮传入文件路径导致无法打开的问题
+- [x] 实现外部规则文件被直接修改后的冲突提示与双向解决流程
 - [x] 更新 implementation.md
 - [x] 同步稳定 specs / logic / assets / docs

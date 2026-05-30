@@ -4,6 +4,7 @@ import { IPC_CHANNELS } from "@prompthub/shared/constants/ipc-channels";
 import type {
   CreateRuleProjectInput,
   RuleBackupRecord,
+  RuleConflictResolutionStrategy,
   RuleFileContent,
   RuleFileDescriptor,
   RuleFileId,
@@ -19,6 +20,7 @@ import {
   listCachedRuleDescriptors,
   readRuleContent,
   removeProjectRule,
+  resolveRuleConflict,
   scanRuleDescriptors,
   saveRuleContent,
 } from "../services/rules-workspace";
@@ -47,6 +49,24 @@ export function registerRulesIPC(): void {
       }
 
       return saveRuleContent(ruleId, content);
+    },
+  );
+
+  ipcMain.handle(
+    IPC_CHANNELS.RULES_RESOLVE_CONFLICT,
+    async (
+      _event,
+      ruleId: RuleFileId,
+      strategy: RuleConflictResolutionStrategy,
+    ): Promise<RuleFileContent> => {
+      if (!ruleId || typeof ruleId !== "string") {
+        throw new Error("rules:resolveConflict requires a ruleId");
+      }
+      if (strategy !== "use-managed" && strategy !== "use-target") {
+        throw new Error("rules:resolveConflict requires a valid strategy");
+      }
+
+      return resolveRuleConflict(ruleId, strategy);
     },
   );
 

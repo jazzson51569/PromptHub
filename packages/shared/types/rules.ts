@@ -47,8 +47,11 @@ export interface RuleFileDescriptor {
 
 export interface RuleFileContent extends RuleFileDescriptor {
   content: string;
+  targetContent?: string;
   versions: RuleVersionSnapshot[];
 }
+
+export type RuleConflictResolutionStrategy = "use-managed" | "use-target";
 
 export interface CreateRuleProjectInput {
   id?: string;

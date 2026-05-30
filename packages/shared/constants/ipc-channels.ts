@@ -56,6 +56,7 @@ export const IPC_CHANNELS = {
   RULES_SCAN: "rules:scan",
   RULES_READ: "rules:read",
   RULES_SAVE: "rules:save",
+  RULES_RESOLVE_CONFLICT: "rules:resolveConflict",
   RULES_REWRITE: "rules:rewrite",
   RULES_ADD_PROJECT: "rules:addProject",
   RULES_REMOVE_PROJECT: "rules:removeProject",
