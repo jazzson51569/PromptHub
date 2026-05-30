@@ -8,6 +8,7 @@ import type {
 import type { SkillPlatform } from "@prompthub/shared/constants/platforms";
 import type { AIModelConfig } from "../../stores/settings.store";
 import { scheduleAllSaveSync } from "../../services/webdav-save-sync";
+import { detectRemoteSourceChannel } from "../../services/skill-source-channel";
 
 export const SKILL_NAME_REGEX = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -107,6 +108,16 @@ export interface SkillSourceMeta {
   sourceLabel: string;
 }
 
+function normalizeRemoteDisplayValue(value: string): string {
+  return value.replace(/^https?:\/\/(www\.)?/i, "").replace(/^git@/i, "");
+}
+
+function isLikelyRemoteGitUrl(value: string): boolean {
+  return /^(?:https?:\/\/|git@).+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?(?:\/tree\/.*)?$/i.test(
+    value.trim(),
+  );
+}
+
 export interface GitHubMarkdownBase {
   hrefBase: string;
   imageBase: string;
@@ -170,20 +181,65 @@ export function getSkillSourceMeta(
             : "skill.sourceGithubRepo",
           skill.registry_slug
             ? "Imported from GitHub / Skill Store"
-            : "Imported from GitHub Repository",
+            : "Imported from GitHub",
         ) ||
         (skill.registry_slug
           ? "Imported from GitHub / Skill Store"
-          : "Imported from GitHub Repository"),
+          : "Imported from GitHub"),
+    };
+  }
+
+  const remoteChannel = detectRemoteSourceChannel({
+    sourceUrl: sourceValue,
+    sourceLabel: skill.source_label,
+  });
+  const isRemoteGitSource =
+    isLikelyRemoteGitUrl(sourceValue) ||
+    remoteChannel === "github" ||
+    remoteChannel === "gitee" ||
+    remoteChannel === "gitea" ||
+    remoteChannel === "git";
+
+  if (isRemoteGitSource) {
+    const displayValue = normalizeRemoteDisplayValue(sourceValue);
+    const sourceLabelKey =
+      remoteChannel === "gitee"
+        ? "skill.sourceGiteeRepo"
+        : remoteChannel === "gitea"
+          ? "skill.sourceGiteaRepo"
+          : remoteChannel === "github"
+            ? skill.registry_slug
+              ? "skill.sourceGithubStore"
+              : "skill.sourceGithubRepo"
+            : "skill.sourceGitRepo";
+    const sourceLabelFallback =
+      remoteChannel === "gitee"
+        ? "Imported from Gitee"
+        : remoteChannel === "gitea"
+          ? "Imported from Gitea"
+          : remoteChannel === "github"
+            ? skill.registry_slug
+              ? "Imported from GitHub / Skill Store"
+              : "Imported from GitHub"
+            : "Imported from Git Repository";
+
+    return {
+      kind: "remote",
+      value: sourceValue,
+      displayValue,
+      shortValue: displayValue,
+      sourceLabel:
+        t?.(sourceLabelKey, sourceLabelFallback) || sourceLabelFallback,
     };
   }
 
   if (/^https?:\/\//i.test(sourceValue)) {
+    const displayValue = normalizeRemoteDisplayValue(sourceValue);
     return {
       kind: "remote",
       value: sourceValue,
-      displayValue: sourceValue.replace(/^https?:\/\/(www\.)?/i, ""),
-      shortValue: sourceValue.replace(/^https?:\/\/(www\.)?/i, ""),
+      displayValue,
+      shortValue: displayValue,
       sourceLabel:
         t?.(
           skill.registry_slug

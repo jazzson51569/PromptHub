@@ -11,8 +11,10 @@ import { useMemo } from "react";
 import type { TFunction } from "i18next";
 import type { Skill } from "@prompthub/shared/types";
 import { normalizeStringArray } from "../../services/skill-normalize";
+import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 import { SkillRenderBoundary } from "./SkillRenderBoundary";
 import { SkillMarkdown } from "./SkillMarkdown";
+import { SkillVariantBadgeList } from "./SkillVariantBadgeList";
 import { renderImmersiveSegments, stripFrontmatter } from "./detail-utils";
 
 interface SkillPreviewPaneProps {
@@ -44,16 +46,29 @@ export function SkillPreviewPane({
   t,
   translationMode,
 }: SkillPreviewPaneProps) {
-  const visibleTags = useMemo(
-    () => normalizeStringArray(selectedSkill.tags).slice(0, 4),
-    [selectedSkill.tags],
+  const visibleTags = useMemo(() => {
+    const originalTags = new Set(
+      normalizeStringArray(selectedSkill.original_tags),
+    );
+    return normalizeStringArray(selectedSkill.tags)
+      .filter((tag) => !originalTags.has(tag))
+      .slice(0, 4);
+  }, [selectedSkill.original_tags, selectedSkill.tags]);
+  const sourceBadges = useMemo(
+    () => buildMySkillSourceBadges(selectedSkill, t),
+    [selectedSkill, t],
   );
-  const safeCategory =
-    typeof selectedSkill.category === "string"
-      ? selectedSkill.category
+  const safeAuthor = useMemo(
+    () =>
+      typeof selectedSkill.author === "string" && selectedSkill.author.trim()
+        ? selectedSkill.author.trim()
+        : undefined,
+    [selectedSkill.author],
+  );
+  const safeAuthorLabel =
+    safeAuthor && safeAuthor.toLowerCase() !== "unknown"
+      ? safeAuthor
       : undefined;
-  const safeAuthor =
-    typeof selectedSkill.author === "string" ? selectedSkill.author : undefined;
   const visibleSkillContent = useMemo(
     () => stripFrontmatter(skillContent),
     [skillContent],
@@ -78,15 +93,11 @@ export function SkillPreviewPane({
           </p>
 
           <div className="flex flex-wrap gap-2">
-            {safeAuthor && (
+            <SkillVariantBadgeList badges={sourceBadges} className="contents" />
+            {safeAuthorLabel && (
               <span className="text-xs bg-accent px-2 py-1 rounded-full font-medium text-foreground/80 flex items-center gap-1">
                 <GlobeIcon className="w-3 h-3 text-muted-foreground" />
-                {safeAuthor}
-              </span>
-            )}
-            {safeCategory && (
-              <span className="text-xs bg-accent px-2 py-1 rounded-full font-medium capitalize">
-                {safeCategory}
+                {safeAuthorLabel}
               </span>
             )}
             {visibleTags.map((tag) => (
@@ -184,25 +195,27 @@ export function SkillPreviewPane({
                 showTranslation && visibleTranslatedContent ? (
                   translationMode === "immersive" ? (
                     <div className="markdown-body">
-                      {renderImmersiveSegments(
-                        visibleTranslatedContent,
-                      ).map((segment, index) =>
-                        segment.type === "translation" ? (
-                          <div
-                            key={index}
-                            className="border-l-2 border-primary/40 pl-3 my-1 text-primary/70 text-[12px] italic"
-                          >
-                            <SkillMarkdown content={segment.text} enableHighlight />
-                          </div>
-                        ) : (
-                          <SkillMarkdown
-                            key={index}
-                            content={segment.text}
-                            sourceUrl={selectedSkill.source_url}
-                            contentUrl={selectedSkill.content_url}
-                            enableHighlight
-                          />
-                        ),
+                      {renderImmersiveSegments(visibleTranslatedContent).map(
+                        (segment, index) =>
+                          segment.type === "translation" ? (
+                            <div
+                              key={index}
+                              className="border-l-2 border-primary/40 pl-3 my-1 text-primary/70 text-[12px] italic"
+                            >
+                              <SkillMarkdown
+                                content={segment.text}
+                                enableHighlight
+                              />
+                            </div>
+                          ) : (
+                            <SkillMarkdown
+                              key={index}
+                              content={segment.text}
+                              sourceUrl={selectedSkill.source_url}
+                              contentUrl={selectedSkill.content_url}
+                              enableHighlight
+                            />
+                          ),
                       )}
                     </div>
                   ) : (

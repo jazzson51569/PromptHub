@@ -4,6 +4,7 @@ import {
   parseSkillsShDetail,
   parseSkillsShLeaderboard,
 } from "../../../src/renderer/services/skills-sh-store";
+import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 
 describe("skills-sh-store", () => {
   it("parses leaderboard cards into unique detail entries", () => {
@@ -92,6 +93,13 @@ Use this skill to look up the right capability for a task.
         slug: "vercel-labs-skills-find-skills",
         name: "find-skills",
         install_name: "find-skills",
+        source_id: buildSkillSourceId({
+          sourceType: "skills-sh",
+          sourceUrl: "https://skills.sh",
+          skillPath: "/vercel-labs/skills/find-skills",
+        }),
+        source_label: "skills.sh",
+        canonical_skill_path: "vercel-labs/skills/find-skills",
         description:
           "Use this skill whenever the user asks how to find or discover skills.",
         source_url: "https://github.com/vercel-labs/skills",
@@ -105,6 +113,42 @@ Use this skill to look up the right capability for a task.
       }),
     );
     expect(skill?.content).toContain("# Finding Skills");
+  });
+
+  it("generates distinct source ids for different skills with the same display name", () => {
+    const html = `
+      <article>
+        <h2>SKILL.md</h2>
+        <pre><code>---
+name: writer
+description: Writer helper.
+---
+
+# Writer
+        </code></pre>
+      </article>
+    `;
+
+    const first = parseSkillsShDetail(html, {
+      owner: "alpha",
+      repo: "skills",
+      skillName: "writer",
+      detailPath: "/alpha/skills/writer",
+      detailUrl: "https://skills.sh/alpha/skills/writer",
+    });
+    const second = parseSkillsShDetail(html, {
+      owner: "beta",
+      repo: "skills",
+      skillName: "writer",
+      detailPath: "/beta/skills/writer",
+      detailUrl: "https://skills.sh/beta/skills/writer",
+    });
+
+    expect(first?.name).toBe("writer");
+    expect(second?.name).toBe("writer");
+    expect(first?.source_id).toBeDefined();
+    expect(second?.source_id).toBeDefined();
+    expect(first?.source_id).not.toBe(second?.source_id);
   });
 
   it("falls back to the default compatibility list when Installed on is absent", () => {

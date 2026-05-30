@@ -43,7 +43,7 @@ describe("skill view tags", () => {
     expect(screen.getByText("extra")).toBeInTheDocument();
   });
 
-  it("shows variant badges in gallery cards", () => {
+  it("shows readable source badges in gallery cards", () => {
     render(
       <SkillGalleryCard
         animationDelayMs={0}
@@ -55,18 +55,122 @@ describe("skill view tags", () => {
         onQuickInstall={vi.fn()}
         onToggleFavorite={vi.fn()}
         onToggleSelection={vi.fn()}
-        skill={{
-          ...baseSkill,
-          is_builtin: true,
-          source_url:
-            "https://github.com/openai/skills/tree/dev/skills/.curated/writer",
-        } as any}
+        skill={
+          {
+            ...baseSkill,
+            is_builtin: true,
+            source_url:
+              "https://github.com/openai/skills/tree/dev/skills/.curated/writer",
+          } as any
+        }
       />,
     );
 
-    expect(screen.getByText("Official")).toBeInTheDocument();
-    expect(screen.getByText("Dev")).toBeInTheDocument();
+    expect(screen.getByText("OpenAI Codex Store")).toBeInTheDocument();
+    expect(screen.queryByText("Official")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dev")).not.toBeInTheDocument();
+    expect(screen.queryByText(".../.curated/writer")).not.toBeInTheDocument();
     expect(screen.getAllByText("Update available").length).toBeGreaterThan(0);
+  });
+
+  it("does not expose repo labels as source badges", () => {
+    render(
+      <SkillGalleryCard
+        animationDelayMs={0}
+        isSelected={false}
+        isSelectionMode={false}
+        onDelete={vi.fn()}
+        onOpen={vi.fn()}
+        onQuickInstall={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onToggleSelection={vi.fn()}
+        skill={
+          {
+            ...baseSkill,
+            is_builtin: true,
+            registry_slug: "writer",
+            source_label: "some-owner/some-repo",
+            source_url:
+              "https://github.com/some-owner/some-repo/tree/main/writer",
+          } as any
+        }
+      />,
+    );
+
+    expect(screen.getByText("GitHub Import")).toBeInTheDocument();
+    expect(screen.queryByText("some-owner/some-repo")).not.toBeInTheDocument();
+    expect(screen.queryByText("Stable")).not.toBeInTheDocument();
+  });
+
+  it("uses specific remote git source badges", () => {
+    const remoteSkills = [
+      {
+        ...baseSkill,
+        id: "gitea-skill",
+        source_url: "https://gitea.example.com/team/skills/tree/main/writer",
+      },
+      {
+        ...baseSkill,
+        id: "gitee-skill",
+        source_url: "https://gitee.com/team/skills/tree/main/writer",
+      },
+      {
+        ...baseSkill,
+        id: "git-skill",
+        source_url: "https://git.example.com/team/skills/tree/main/writer",
+      },
+    ];
+
+    render(
+      <>
+        {remoteSkills.map((skill) => (
+          <SkillGalleryCard
+            key={skill.id}
+            animationDelayMs={0}
+            isSelected={false}
+            isSelectionMode={false}
+            onDelete={vi.fn()}
+            onOpen={vi.fn()}
+            onQuickInstall={vi.fn()}
+            onToggleFavorite={vi.fn()}
+            onToggleSelection={vi.fn()}
+            skill={skill as any}
+          />
+        ))}
+      </>,
+    );
+
+    expect(screen.getByText("Gitea Import")).toBeInTheDocument();
+    expect(screen.getByText("Gitee Import")).toBeInTheDocument();
+    expect(screen.getByText("Git Import")).toBeInTheDocument();
+    expect(screen.queryByText("Remote Import")).not.toBeInTheDocument();
+  });
+
+  it("uses custom store labels when they are user-readable", () => {
+    render(
+      <SkillGalleryCard
+        animationDelayMs={0}
+        isSelected={false}
+        isSelectionMode={false}
+        onDelete={vi.fn()}
+        onOpen={vi.fn()}
+        onQuickInstall={vi.fn()}
+        onToggleFavorite={vi.fn()}
+        onToggleSelection={vi.fn()}
+        skill={
+          {
+            ...baseSkill,
+            is_builtin: true,
+            registry_slug: "writer",
+            source_label: "Team Store",
+            source_url:
+              "https://github.com/some-owner/some-repo/tree/main/writer",
+          } as any
+        }
+      />,
+    );
+
+    expect(screen.getByText("Team Store")).toBeInTheDocument();
   });
 
   it("shows up to three tags in list view rows", async () => {
@@ -82,10 +186,7 @@ describe("skill view tags", () => {
 
     await act(async () => {
       await renderWithI18n(
-        <SkillListView
-          skills={[baseSkill as any]}
-          onQuickInstall={vi.fn()}
-        />,
+        <SkillListView skills={[baseSkill as any]} onQuickInstall={vi.fn()} />,
         { language: "en" },
       );
     });
@@ -122,6 +223,36 @@ describe("skill view tags", () => {
       );
     });
 
-    expect(screen.getByText("Local")).toBeInTheDocument();
+    expect(screen.getByText("Local Import")).toBeInTheDocument();
+  });
+
+  it("distinguishes project imports from local imports", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([]),
+          detectPlatforms: vi.fn().mockResolvedValue([]),
+          getMdInstallStatusBatch: vi.fn().mockResolvedValue({}),
+        },
+      },
+    });
+
+    await act(async () => {
+      await renderWithI18n(
+        <SkillListView
+          skills={[
+            {
+              ...baseSkill,
+              id: "skill-project",
+              source_url: "/workspace/app/.claude/skills/writer",
+            } as any,
+          ]}
+          onQuickInstall={vi.fn()}
+        />,
+        { language: "en" },
+      );
+    });
+
+    expect(screen.getByText("Project Import")).toBeInTheDocument();
   });
 });

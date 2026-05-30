@@ -453,7 +453,9 @@ async function syncRemoteGitHubSkillRepo(
       const rawUrl = `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${location.branch}/${file.path}`;
       if (relativePath.toLowerCase() === "skill.md") {
         const content = await window.api.skill.fetchRemoteContent(rawUrl);
-        await window.api.skill.writeLocalFile(skillId, relativePath, content);
+        await window.api.skill.writeLocalFile(skillId, relativePath, content, {
+          skipVersionSnapshot: true,
+        });
         return;
       }
 
@@ -1368,6 +1370,7 @@ export const useSkillStore = create<SkillState>()(
                   newSkill.id,
                   "SKILL.md",
                   effectiveContent,
+                  { skipVersionSnapshot: true },
                 );
                 await syncRemoteGitHubSkillRepo(
                   newSkill.id,

@@ -335,6 +335,104 @@ describe("CreateSkillModal GitHub import", () => {
     });
   });
 
+  it("keeps direct Git selections independent for same-slug source variants", async () => {
+    const installRegistrySkill = vi
+      .fn()
+      .mockResolvedValue({ id: "installed-writer", name: "writer" });
+    useSkillStore.setState({ installRegistrySkill } as never);
+
+    const scanRemoteGithub = vi.fn().mockResolvedValue([
+      {
+        slug: "writer",
+        name: "writer",
+        install_name: "writer",
+        source_id: "source-writer-main",
+        source_branch: "main",
+        source_directory: "skills/stable/writer",
+        canonical_skill_path: "skills/stable/writer/SKILL.md",
+        description: "Stable writer",
+        category: "dev",
+        author: "demo",
+        source_url: "https://gitea.example.com/demo/skills/tree/main/skills/stable/writer",
+        tags: ["writer"],
+        version: "1.0.0",
+        content: "# writer stable",
+        compatibility: ["claude"],
+      },
+      {
+        slug: "writer",
+        name: "writer",
+        install_name: "writer",
+        source_id: "source-writer-dev",
+        source_branch: "main",
+        source_directory: "skills/dev/writer",
+        canonical_skill_path: "skills/dev/writer/SKILL.md",
+        description: "Dev writer",
+        category: "dev",
+        author: "demo",
+        source_url: "https://gitea.example.com/demo/skills/tree/main/skills/dev/writer",
+        tags: ["writer"],
+        version: "1.0.0",
+        content: "# writer dev",
+        compatibility: ["claude"],
+      },
+    ]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn(),
+          scanRemoteGithub,
+        },
+      },
+    });
+
+    const view = await renderWithI18n(
+      <CreateSkillModal isOpen={true} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Install from Git Repository"));
+    });
+
+    fireEvent.change(view.getByPlaceholderText("https://github.com/owner/skill-repo"), {
+      target: { value: "https://gitea.example.com/demo/skills" },
+    });
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Scan Repository"));
+    });
+
+    await waitFor(() => {
+      expect(view.getByText("Found 2 import option(s)")).toBeTruthy();
+    });
+
+    const writerButtons = view
+      .getAllByText("writer")
+      .map((node) => node.closest("button"))
+      .filter((node): node is HTMLButtonElement => node !== null);
+    expect(writerButtons).toHaveLength(2);
+
+    await act(async () => {
+      fireEvent.click(writerButtons[0]);
+    });
+
+    await act(async () => {
+      fireEvent.click(view.getByText("Import Selected"));
+    });
+
+    await waitFor(() => {
+      expect(installRegistrySkill).toHaveBeenCalledTimes(1);
+    });
+
+    expect(installRegistrySkill).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source_id: "source-writer-dev",
+      }),
+    );
+  });
+
   it("uses clone-based remote scan for self-hosted HTTPS git repositories", async () => {
     const scanRemoteGithub = vi.fn().mockResolvedValue([
       {

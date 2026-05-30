@@ -78,6 +78,7 @@ description: |
     const t = vi.fn((key: string, fallback: string) => {
       const map: Record<string, string> = {
         "skill.sourceGithubStore": "Imported via Store",
+        "skill.sourceRemoteGitRepo": "Imported from Remote Git Repository",
         "skill.sourceLocalFolder": "Imported from Local Folder",
         "skill.sourceCursorLocalFolder": "Imported from Cursor Folder",
       };
@@ -108,6 +109,49 @@ description: |
     expect(local?.sourceLabel).toBe("Imported from Cursor Folder");
     expect(localSourceUrl?.kind).toBe("local");
     expect(localSourceUrl?.sourceLabel).toBe("Imported from Local Folder");
+  });
+
+  it("treats self-hosted git URLs as remote git repositories instead of local folders", () => {
+    const remote = getSkillSourceMeta(
+      {
+        source_url: "https://gitea.example.com/org/skills/tree/main/writer",
+      } as any,
+      ((key: string, fallback: string) =>
+        key === "skill.sourceGiteaRepo"
+          ? "Imported from Gitea"
+          : fallback) as any,
+    );
+
+    expect(remote).toMatchObject({
+      kind: "remote",
+      value: "https://gitea.example.com/org/skills/tree/main/writer",
+      displayValue: "gitea.example.com/org/skills/tree/main/writer",
+      sourceLabel: "Imported from Gitea",
+    });
+  });
+
+  it("uses concrete source labels for Gitee and generic Git imports", () => {
+    const gitee = getSkillSourceMeta(
+      {
+        source_url: "https://gitee.com/org/skills/tree/main/writer",
+      } as any,
+      ((key: string, fallback: string) =>
+        key === "skill.sourceGiteeRepo"
+          ? "Imported from Gitee"
+          : fallback) as any,
+    );
+    const git = getSkillSourceMeta(
+      {
+        source_url: "https://git.example.com/org/skills/tree/main/writer",
+      } as any,
+      ((key: string, fallback: string) =>
+        key === "skill.sourceGitRepo"
+          ? "Imported from Git Repository"
+          : fallback) as any,
+    );
+
+    expect(gitee?.sourceLabel).toBe("Imported from Gitee");
+    expect(git?.sourceLabel).toBe("Imported from Git Repository");
   });
 
   it("resolves GitHub markdown base paths for repo subdirectories", () => {
@@ -207,11 +251,11 @@ description: |
     const createElementSpy = vi
       .spyOn(document, "createElement")
       .mockImplementation((tagName) => {
-      if (tagName === "a") {
-        return anchor;
-      }
-      return originalCreateElement(tagName);
-    });
+        if (tagName === "a") {
+          return anchor;
+        }
+        return originalCreateElement(tagName);
+      });
 
     downloadSkillZipExport({
       fileName: "write.zip",

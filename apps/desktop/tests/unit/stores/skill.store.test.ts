@@ -620,6 +620,7 @@ description: Use this skill for PDF tasks.
       "skill-binary",
       "SKILL.md",
       "# Binary Skill\n\nHello\n",
+      { skipVersionSnapshot: true },
     );
     expect(fetchRemoteContentBytes).toHaveBeenCalledWith(
       "https://raw.githubusercontent.com/example/skills/main/skills/binary-skill/assets/icon.png",

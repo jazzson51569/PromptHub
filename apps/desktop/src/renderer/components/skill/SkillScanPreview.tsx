@@ -442,11 +442,6 @@ export function SkillScanPreview({
                                 <h4 className="font-semibold text-sm truncate">
                                   {skill.name}
                                 </h4>
-                                {skill.version && (
-                                  <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                    v{skill.version}
-                                  </span>
-                                )}
                                 {skill.isInstalled && (
                                   <span className="text-[10px] bg-accent text-muted-foreground px-2 py-0.5 rounded-full">
                                     {t(

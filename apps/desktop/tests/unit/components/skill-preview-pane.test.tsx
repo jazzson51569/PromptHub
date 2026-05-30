@@ -13,7 +13,8 @@ describe("SkillPreviewPane", () => {
       tags: '["ops","docs"]' as any,
     });
 
-    const t = ((key: string, defaultValue?: string) => defaultValue ?? key) as any;
+    const t = ((key: string, defaultValue?: string) =>
+      defaultValue ?? key) as any;
 
     await renderWithI18n(
       <SkillPreviewPane
@@ -44,7 +45,8 @@ describe("SkillPreviewPane", () => {
 
   it("shows a stale translation badge when saved translation needs refresh", async () => {
     const skill = createSkillFixture();
-    const t = ((key: string, defaultValue?: string) => defaultValue ?? key) as any;
+    const t = ((key: string, defaultValue?: string) =>
+      defaultValue ?? key) as any;
 
     await renderWithI18n(
       <SkillPreviewPane
@@ -66,5 +68,40 @@ describe("SkillPreviewPane", () => {
     expect(
       screen.getByText("Saved translation needs refresh"),
     ).toBeInTheDocument();
+  });
+
+  it("shows source and user tags without raw category pills", async () => {
+    const skill = createSkillFixture({
+      author: "JimLiu",
+      category: "dev",
+      source_url: "https://github.com/org/skills/tree/main/baoyu-imagine",
+      tags: ["image", "测试123"],
+      original_tags: ["image"],
+    });
+    const t = ((key: string, defaultValue?: string) =>
+      defaultValue ?? key) as any;
+
+    await renderWithI18n(
+      <SkillPreviewPane
+        cachedInstructionsTranslation={null}
+        copyStatus={{ instr: false }}
+        handleCopy={vi.fn()}
+        handleTranslateSkill={vi.fn()}
+        hasStaleTranslation={false}
+        isTranslating={false}
+        resolvedDescription="Image generation skill"
+        selectedSkill={skill}
+        showTranslation={false}
+        skillContent={"# Skill\n\nBody"}
+        t={t}
+        translationMode="full"
+      />,
+    );
+
+    expect(screen.getByText("GitHub Import")).toBeInTheDocument();
+    expect(screen.getByText("JimLiu")).toBeInTheDocument();
+    expect(screen.getByText("测试123")).toBeInTheDocument();
+    expect(screen.queryByText("Dev")).not.toBeInTheDocument();
+    expect(screen.queryByText("image")).not.toBeInTheDocument();
   });
 });

@@ -13,6 +13,7 @@ function makeSkill(overrides: Partial<RegistrySkill> = {}): RegistrySkill {
     icon_background: "#f0f0f0",
     author: "tester",
     source_url: "https://example.com/skill",
+    source_id: "test-skill-source",
     tags: [],
     version: "1.0.0",
     content: "# Test\n",
@@ -127,9 +128,9 @@ describe("SkillStoreCard", () => {
   it("disables the install button and shows a spinner while installing this skill", () => {
     const { container } = render(
       <SkillStoreCard
-        skill={makeSkill({ slug: "busy" })}
+        skill={makeSkill({ source_id: "busy" })}
         isInstalled={false}
-        installingSlug="busy"
+        installingSourceId="busy"
         index={0}
         onQuickInstall={vi.fn()}
         onClick={vi.fn()}
@@ -145,9 +146,9 @@ describe("SkillStoreCard", () => {
   it("does NOT disable the install button while another skill is installing", () => {
     render(
       <SkillStoreCard
-        skill={makeSkill({ slug: "skill-a" })}
+        skill={makeSkill({ source_id: "skill-a" })}
         isInstalled={false}
-        installingSlug="skill-b"
+        installingSourceId="skill-b"
         index={0}
         onQuickInstall={vi.fn()}
         onClick={vi.fn()}
@@ -178,5 +179,25 @@ describe("SkillStoreCard", () => {
       />,
     );
     expect(screen.queryByText(/\/wk$/)).not.toBeInTheDocument();
+  });
+
+  it("uses the selected store name instead of technical branch and directory badges", () => {
+    render(
+      <SkillStoreCard
+        skill={makeSkill({
+          source_label: "anthropics/skills",
+          source_branch: "main",
+          source_directory: "skills/claude-api",
+        })}
+        isInstalled={false}
+        index={0}
+        storeLabel="Claude Code Store"
+        onClick={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Claude Code Store")).toBeInTheDocument();
+    expect(screen.queryByText("Stable")).not.toBeInTheDocument();
+    expect(screen.queryByText("skills/claude-api")).not.toBeInTheDocument();
   });
 });

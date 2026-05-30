@@ -12,6 +12,7 @@ interface SkillStoreCardProps {
   isInstalled: boolean;
   hasUpdate?: boolean;
   index: number;
+  storeLabel?: string;
   installingSourceId?: string | null;
   onQuickInstall?: (skill: RegistrySkill, e: React.MouseEvent) => void;
   onClick: () => void;
@@ -22,16 +23,33 @@ export function SkillStoreCard({
   isInstalled,
   hasUpdate = false,
   index,
+  storeLabel,
   installingSourceId,
   onQuickInstall,
   onClick,
 }: SkillStoreCardProps) {
   const { t } = useTranslation();
-  const isInstallingThis = installingSourceId === skill.source_id;
-  const badges = buildSkillVariantBadges(skill, t, {
+  const isInstallingThis = Boolean(
+    installingSourceId && skill.source_id && installingSourceId === skill.source_id,
+  );
+  const variantBadges = buildSkillVariantBadges(skill, t, {
     hasUpdate,
     isInstalled,
   });
+  const statusBadges = variantBadges.filter(
+    (badge) => badge.tone === "installed" || badge.tone === "update",
+  );
+  const badges = storeLabel
+    ? [
+        {
+          key: "store-source",
+          label: storeLabel,
+          title: skill.source_label || skill.source_url,
+          tone: variantBadges[0]?.tone || "git",
+        },
+        ...statusBadges,
+      ]
+    : variantBadges;
 
   return (
     <div

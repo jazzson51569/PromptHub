@@ -1,4 +1,5 @@
 import type { RegistrySkill, SkillCategory } from "@prompthub/shared/types";
+import { buildSkillSourceId } from "@prompthub/shared/utils/skill-identity";
 
 export const SKILLS_SH_BASE_URL = "https://skills.sh";
 
@@ -291,6 +292,13 @@ export function parseSkillsShDetail(
     slug: slugify(`${entry.owner}-${entry.repo}-${entry.skillName}`),
     name: displayName,
     install_name: entry.skillName,
+    source_id: buildSkillSourceId({
+      sourceType: "skills-sh",
+      sourceUrl: SKILLS_SH_BASE_URL,
+      skillPath: entry.detailPath,
+    }),
+    source_label: "skills.sh",
+    canonical_skill_path: entry.detailPath.replace(/^\/+/, ""),
     description,
     category: inferCategory(entry.skillName, description),
     author: entry.owner,

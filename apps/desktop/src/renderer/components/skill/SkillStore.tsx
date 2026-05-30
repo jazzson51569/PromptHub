@@ -20,6 +20,7 @@ import {
   FolderIcon,
   DatabaseIcon,
   RefreshCwIcon,
+  StoreIcon,
 } from "lucide-react";
 import { SkillStoreDetail } from "./SkillStoreDetail";
 import { SkillStoreCard } from "./SkillStoreCard";
@@ -94,6 +95,10 @@ function formatStoreSourceHint(source: SkillStoreSource): string {
   return parts.join(" | ");
 }
 
+function getRegistrySkillSelectionId(skill: RegistrySkill): string {
+  return skill.source_id || skill.slug;
+}
+
 export function SkillStore() {
   const { t, i18n } = useTranslation();
   const isZh = i18n.language?.startsWith("zh");
@@ -114,9 +119,8 @@ export function SkillStore() {
     (state) => state.selectedRegistrySlug,
   );
   const registrySkills = useSkillStore((state) => state.registrySkills) ?? [];
-  const selectedStoreSourceId = useSkillStore(
-    (state) => state.selectedStoreSourceId,
-  ) ?? "official";
+  const selectedStoreSourceId =
+    useSkillStore((state) => state.selectedStoreSourceId) ?? "official";
   const selectStoreSource = useSkillStore((state) => state.selectStoreSource);
   const customStoreSources =
     useSkillStore((state) => state.customStoreSources) ?? [];
@@ -135,8 +139,12 @@ export function SkillStore() {
       selectedStoreSourceId,
     });
 
-  const [installingSourceId, setInstallingSourceId] = useState<string | null>(null);
-  const [editingCustomSourceId, setEditingCustomSourceId] = useState<string | null>(null);
+  const [installingSourceId, setInstallingSourceId] = useState<string | null>(
+    null,
+  );
+  const [editingCustomSourceId, setEditingCustomSourceId] = useState<
+    string | null
+  >(null);
   const [sourceType, setSourceType] =
     useState<
       Extract<
@@ -182,7 +190,7 @@ export function SkillStore() {
   const sourceRegistrySkills = useMemo(() => {
     const baseSkills: RegistrySkill[] =
       selectedStoreSourceId === "official"
-        ? registrySkills
+        ? []
         : selectedRemoteEntry?.skills || [];
 
     // Centralized filter — see `skill-store-search.ts`. The previous
@@ -206,7 +214,7 @@ export function SkillStore() {
     if (!selectedRegistrySlug) return null;
     return (
       sourceRegistrySkills.find(
-        (skill) => skill.source_id === selectedRegistrySlug,
+        (skill) => getRegistrySkillSelectionId(skill) === selectedRegistrySlug,
       ) || null
     );
   }, [selectedRegistrySlug, sourceRegistrySkills]);
@@ -236,7 +244,10 @@ export function SkillStore() {
     (payload: {
       id: string;
       name: string;
-      type: Extract<SkillStoreSource["type"], "marketplace-json" | "git-repo" | "local-dir">;
+      type: Extract<
+        SkillStoreSource["type"],
+        "marketplace-json" | "git-repo" | "local-dir"
+      >;
       url: string;
       branch?: string;
       directory?: string;
@@ -336,7 +347,10 @@ export function SkillStore() {
           return;
         }
       }
-      const result = await installRegistrySkill(skill);
+      const result = await installRegistrySkill({
+        ...skill,
+        source_label: selectedCustomSource?.name || skill.source_label,
+      });
       if (result) {
         showToast(`${t("skill.addedToLibrary")}: ${skill.name}`, "success");
       }
@@ -456,11 +470,11 @@ export function SkillStore() {
     return {
       title: t("skill.officialStore", "Official Store"),
       hint: t(
-        "skill.storeHint",
-        "Discover and import skills from official, community, and custom stores.",
+        "skill.officialStoreComingSoonHint",
+        "The official store is not open yet. You can import skills from Claude Code, OpenAI Codex, or a custom store for now.",
       ),
-      count: sourceRegistrySkills.length,
-      showCatalog: true,
+      count: 0,
+      showCatalog: false,
       canRefresh: false,
     };
   }, [
@@ -581,15 +595,15 @@ export function SkillStore() {
                     "skill.loadingOpenAiStore",
                     "Loading OpenAI Codex skills from the remote source...",
                   )
-              : selectedStoreSourceId === "community"
-                ? t(
-                    "skill.loadingCommunityStore",
-                    "Loading skills.sh community skill list...",
-                  )
-                : t(
-                    "skill.loadingCustomStore",
-                    "Loading custom store content...",
-                  )}
+                : selectedStoreSourceId === "community"
+                  ? t(
+                      "skill.loadingCommunityStore",
+                      "Loading skills.sh community skill list...",
+                    )
+                  : t(
+                      "skill.loadingCustomStore",
+                      "Loading custom store content...",
+                    )}
           </div>
         )}
 
@@ -608,7 +622,9 @@ export function SkillStore() {
                 </p>
               </div>
               <button
-                onClick={() => void loadStoreSource(selectedStoreSourceId, true)}
+                onClick={() =>
+                  void loadStoreSource(selectedStoreSourceId, true)
+                }
                 disabled={loadingSourceId === selectedStoreSourceId}
                 className="shrink-0 self-start rounded-lg bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive transition-colors hover:bg-destructive/20 disabled:opacity-40"
               >
@@ -633,12 +649,15 @@ export function SkillStore() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {installed.map((skill, index) => (
                     <SkillStoreCard
-                      key={skill.source_id}
+                      key={getRegistrySkillSelectionId(skill)}
                       skill={skill}
                       isInstalled={true}
                       hasUpdate={hasPotentialUpdate(skill)}
                       index={index}
-                      onClick={() => selectRegistrySkill(skill.source_id)}
+                      storeLabel={sourceMeta.title}
+                      onClick={() =>
+                        selectRegistrySkill(getRegistrySkillSelectionId(skill))
+                      }
                     />
                   ))}
                 </div>
@@ -658,13 +677,16 @@ export function SkillStore() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {recommended.map((skill, index) => (
                     <SkillStoreCard
-                      key={skill.source_id}
+                      key={getRegistrySkillSelectionId(skill)}
                       skill={skill}
                       isInstalled={false}
                       index={index}
+                      storeLabel={sourceMeta.title}
                       installingSourceId={installingSourceId}
                       onQuickInstall={handleQuickInstall}
-                      onClick={() => selectRegistrySkill(skill.source_id)}
+                      onClick={() =>
+                        selectRegistrySkill(getRegistrySkillSelectionId(skill))
+                      }
                     />
                   ))}
                 </div>
@@ -821,6 +843,21 @@ export function SkillStore() {
           </div>
         )}
 
+        {selectedStoreSourceId === "official" && (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-20 text-center text-muted-foreground">
+            <StoreIcon className="mb-4 h-12 w-12 opacity-25" />
+            <h3 className="mb-1 text-lg font-semibold text-foreground">
+              {t("skill.officialStoreComingSoon", "Official store coming soon")}
+            </h3>
+            <p className="max-w-md text-sm leading-6 opacity-80">
+              {t(
+                "skill.officialStoreComingSoonHint",
+                "The official store is not open yet. You can import skills from Claude Code, OpenAI Codex, or a custom store for now.",
+              )}
+            </p>
+          </div>
+        )}
+
         {(selectedStoreSourceId === "new-custom" || selectedCustomSource) && (
           <section className="space-y-4">
             <SkillStoreCustomSources
@@ -843,7 +880,10 @@ export function SkillStore() {
               <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-muted/20 px-6 py-20 text-center text-muted-foreground">
                 <Link2Icon className="mb-4 h-12 w-12 opacity-25" />
                 <h3 className="mb-1 text-lg font-semibold text-foreground">
-                  {t("skill.customStoreEmpty", "No skills in this custom store yet")}
+                  {t(
+                    "skill.customStoreEmpty",
+                    "No skills in this custom store yet",
+                  )}
                 </h3>
                 <p className="max-w-md text-sm leading-6 opacity-80">
                   {t(
@@ -866,7 +906,9 @@ export function SkillStore() {
         onRefresh={handleRefreshCustomSource}
         refreshingSourceId={loadingSourceId}
         source={
-          customStoreSources.find((source) => source.id === editingCustomSourceId) ?? null
+          customStoreSources.find(
+            (source) => source.id === editingCustomSourceId,
+          ) ?? null
         }
       />
 
@@ -874,6 +916,7 @@ export function SkillStore() {
         <SkillStoreDetail
           skill={selectedDetailSkill}
           isInstalled={isSkillInstalled(selectedDetailSkill)}
+          storeLabel={sourceMeta.title}
           onClose={() => selectRegistrySkill(null)}
         />
       )}

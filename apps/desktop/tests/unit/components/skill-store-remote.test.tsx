@@ -150,6 +150,38 @@ describe("SkillStore remote loading", () => {
     expect(queryByText(/GitHub token in settings/i)).not.toBeInTheDocument();
   });
 
+  it("uses user-facing copy for the official store empty state", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn(),
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      selectedStoreSourceId: "official",
+    });
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "zh" });
+    });
+
+    expect(screen.getAllByText(/官方商店暂未开放/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Claude Code/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/后端|backend/i)).not.toBeInTheDocument();
+  });
+
   it("shows network guidance when GitHub cannot be reached", async () => {
     const fetchRemoteContent = vi
       .fn()
@@ -733,8 +765,76 @@ describe("SkillStore remote loading", () => {
       expect(screen.getAllByText("Writer")).toHaveLength(2);
     });
 
-    expect(screen.getByText("Stable")).toBeInTheDocument();
-    expect(screen.getByText("Dev")).toBeInTheDocument();
+    expect(screen.getAllByText("Same Name Source").length).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByText("Stable")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dev")).not.toBeInTheDocument();
+  });
+
+  it("opens the store detail when a remote card only has a slug selection id", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn(),
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      selectedStoreSourceId: "slug-only-source",
+      registrySkills: [],
+      remoteStoreEntries: {
+        "slug-only-source": {
+          loadedAt: Date.now(),
+          error: null,
+          skills: [
+            {
+              slug: "slug-only-writer",
+              name: "Slug Only Writer",
+              description: "Opens by slug",
+              category: "general",
+              author: "PromptHub",
+              source_url: "https://example.com/slug-only-writer",
+              tags: ["writing"],
+              version: "1.0.0",
+              content: "# Slug Only Writer\n\nDetail body",
+            },
+          ],
+        },
+      },
+      customStoreSources: [
+        {
+          id: "slug-only-source",
+          name: "Slug Only Source",
+          type: "marketplace-json",
+          url: "https://example.com/slug-only-store.json",
+          enabled: true,
+          createdAt: Date.now(),
+        },
+      ],
+    } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    fireEvent.click(screen.getByText("Slug Only Writer"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Detail body")).toBeInTheDocument();
+    });
+    expect(screen.getAllByText("Slug Only Source").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText("skills/slug-only-writer")).not.toBeInTheDocument();
+    expect(useSkillStore.getState().selectedRegistrySlug).toBe("slug-only-writer");
   });
 
   it("shows local source badges in store detail", async () => {
@@ -770,6 +870,54 @@ describe("SkillStore remote loading", () => {
 
     expect(screen.getAllByText("Local").length).toBeGreaterThan(0);
     expect(screen.getByText("Dev")).toBeInTheDocument();
+  });
+
+  it("does not show store versions in store detail", async () => {
+    useSkillStore.setState({
+      getTranslationState: vi.fn().mockReturnValue({
+        value: null,
+        hasTranslation: false,
+        isStale: false,
+      }),
+    } as never);
+
+    const skill = {
+      slug: "placeholder-version",
+      name: "Placeholder Version",
+      source_id: "placeholder-version",
+      description: "Placeholder version skill",
+      category: "general",
+      tags: [],
+      version: "1.0.0",
+      content: "# Placeholder Version\n\nNo display version.",
+      source_url: "https://example.com/placeholder-version",
+      author: "PromptHub",
+    } as never;
+
+    await renderWithI18n(
+      <SkillStoreDetail skill={skill} isInstalled={false} onClose={vi.fn()} />,
+      { language: "en" },
+    );
+
+    expect(screen.queryByText("v1.0.0")).not.toBeInTheDocument();
+
+    await renderWithI18n(
+      <SkillStoreDetail
+        skill={{
+          ...skill,
+          slug: "explicit-version",
+          name: "Explicit Version",
+          source_id: "explicit-version",
+          version: "v2",
+          content: "# Explicit Version\n\nNo display version.",
+        }}
+        isInstalled={false}
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    expect(screen.queryByText("v2")).not.toBeInTheDocument();
   });
 
   it("loads git-repo store sources through SSH scan when given git@github.com URLs", async () => {
@@ -851,12 +999,13 @@ describe("SkillStore remote loading", () => {
         slug: "icelemon-skill",
         name: "icelemon-skill",
         install_name: "icelemon-skill",
+        source_label: "icelemon/skills",
+        source_branch: "main",
         source_id: "source-icelemon-gitea",
         description: "Gitea scanned store skill",
         category: "dev",
         author: "icelemon",
-        source_url: "/tmp/gitea-store/icelemon-skill",
-        content_url: "/tmp/gitea-store/icelemon-skill",
+        source_url: "https://gitea.example.com/icelemon/skills/tree/main",
         tags: ["dev"],
         version: "1.0.0",
         content: "# icelemon",
@@ -907,6 +1056,14 @@ describe("SkillStore remote loading", () => {
       ).toHaveLength(1);
     });
 
+    await act(async () => {
+      screen.getByText("icelemon-skill").click();
+    });
+
+    expect(screen.getAllByText("Gitea Repo").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryAllByText("Git")).toHaveLength(0);
+    expect(screen.queryAllByText("Local")).toHaveLength(0);
+
     expect(scanRemoteGithub).toHaveBeenCalledWith(
       "https://gitea.example.com/icelemon/skills",
       expect.any(Array),
@@ -914,6 +1071,125 @@ describe("SkillStore remote loading", () => {
       undefined,
     );
     expect(fetchRemoteContent).not.toHaveBeenCalled();
+  });
+
+  it("keeps imported state after refreshing a self-hosted git source", async () => {
+    const scanRemoteGithub = vi
+      .fn()
+      .mockResolvedValueOnce([
+        {
+          slug: "writer",
+          name: "writer",
+          install_name: "writer",
+          source_label: "icelemon/skills",
+          source_branch: "main",
+          source_directory: "skills/writer",
+          canonical_skill_path: "skills/writer/SKILL.md",
+          source_id: "stable-writer-source-id",
+          description: "Writer skill",
+          category: "dev",
+          author: "icelemon",
+          source_url: "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
+          tags: ["dev"],
+          version: "1.0.0",
+          content: "# writer",
+          compatibility: ["claude", "cursor"],
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          slug: "writer",
+          name: "writer",
+          install_name: "writer",
+          source_label: "icelemon/skills",
+          source_branch: "main",
+          source_directory: "skills/writer",
+          canonical_skill_path: "skills/writer/SKILL.md",
+          source_id: "stable-writer-source-id",
+          description: "Writer skill",
+          category: "dev",
+          author: "icelemon",
+          source_url: "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
+          tags: ["dev"],
+          version: "1.0.0",
+          content: "# writer",
+          compatibility: ["claude", "cursor"],
+        },
+      ]);
+
+    installWindowMocks({
+      api: {
+        skill: {
+          fetchRemoteContent: vi.fn(),
+          scanRemoteGithub,
+          scanLocalPreview: vi.fn().mockResolvedValue([]),
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    useSkillStore.setState({
+      skills: [
+        {
+          id: "installed-writer",
+          name: "writer",
+          source_id: "stable-writer-source-id",
+          source_url: "https://gitea.example.com/icelemon/skills/tree/main/skills/writer",
+          protocol_type: "skill",
+          author: "icelemon",
+          tags: ["dev"],
+          is_favorite: false,
+          currentVersion: 0,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+      customStoreSources: [
+        {
+          id: "gitea-refresh-repo",
+          name: "Gitea Refresh Repo",
+          type: "git-repo",
+          url: "https://gitea.example.com/icelemon/skills",
+          enabled: true,
+          createdAt: Date.now(),
+        },
+      ],
+      selectedStoreSourceId: "gitea-refresh-repo",
+    } as never);
+
+    await act(async () => {
+      await renderWithI18n(<SkillStore />, { language: "en" });
+    });
+
+    await waitFor(() => {
+      expect(
+        useSkillStore.getState().remoteStoreEntries["gitea-refresh-repo"]?.skills,
+      ).toHaveLength(1);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Imported").length).toBeGreaterThan(0);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    });
+
+    await waitFor(() => {
+      expect(scanRemoteGithub).toHaveBeenCalledTimes(2);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Imported").length).toBeGreaterThan(0);
+    });
   });
 
   it("binds the catalog search box to storeSearchQuery", async () => {

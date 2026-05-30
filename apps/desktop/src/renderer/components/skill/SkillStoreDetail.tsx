@@ -58,6 +58,7 @@ import {
 interface SkillStoreDetailProps {
   skill: RegistrySkill;
   isInstalled: boolean;
+  storeLabel?: string;
   onClose: () => void;
 }
 
@@ -68,6 +69,7 @@ interface SkillStoreDetailProps {
 export function SkillStoreDetail({
   skill,
   isInstalled,
+  storeLabel,
   onClose,
 }: SkillStoreDetailProps) {
   const { t, i18n } = useTranslation();
@@ -78,7 +80,9 @@ export function SkillStoreDetail({
   const installRegistrySkill = useSkillStore(
     (state) => state.installRegistrySkill,
   );
-  const updateRegistrySkill = useSkillStore((state) => state.updateRegistrySkill);
+  const updateRegistrySkill = useSkillStore(
+    (state) => state.updateRegistrySkill,
+  );
   const getRegistrySkillUpdateStatus = useSkillStore(
     (state) => state.getRegistrySkillUpdateStatus,
   );
@@ -88,7 +92,9 @@ export function SkillStoreDetail({
   const skills = useSkillStore((state) => state.skills);
   const saveSafetyReport = useSkillStore((state) => state.saveSafetyReport);
   const translateContent = useSkillStore((state) => state.translateContent);
-  const getTranslationState = useSkillStore((state) => state.getTranslationState);
+  const getTranslationState = useSkillStore(
+    (state) => state.getTranslationState,
+  );
   const clearTranslation = useSkillStore((state) => state.clearTranslation);
   const translationMode = useSettingsStore((state) => state.translationMode);
   const autoScanBeforeInstall = useSettingsStore(
@@ -118,6 +124,7 @@ export function SkillStoreDetail({
   const stalePromptFingerprintRef = useRef<string | null>(null);
   const [translationSidecar, setTranslationSidecar] =
     useState<SkillTranslationSidecar | null>(null);
+  const skillSourceKey = skill.source_id || skill.slug || skill.source_url;
 
   const targetLang = useMemo(() => {
     const lang = (i18n.language || "").toLowerCase();
@@ -131,17 +138,25 @@ export function SkillStoreDetail({
   }, [i18n.language]);
 
   const installedSkill = skills.find(
-    (item) => item.source_id === skill.source_id,
+    (item) =>
+      item.source_id === skillSourceKey ||
+      item.registry_slug === skill.slug ||
+      item.name === skill.slug,
   );
   const installedSkillMdContent =
     installedSkill?.instructions || installedSkill?.content || "";
-  const registrySkillMdContent = typeof skill.content === "string" ? skill.content : "";
+  const registrySkillMdContent =
+    typeof skill.content === "string" ? skill.content : "";
   const preferSourceContent = Boolean(
     skill.content_url && isLikelyLocalSource(skill.content_url),
   );
   const originalSkillMdContent =
-    (preferSourceContent ? registrySkillMdContent.trim() : installedSkillMdContent.trim()) ||
-    (preferSourceContent ? installedSkillMdContent.trim() : registrySkillMdContent.trim()) ||
+    (preferSourceContent
+      ? registrySkillMdContent.trim()
+      : installedSkillMdContent.trim()) ||
+    (preferSourceContent
+      ? installedSkillMdContent.trim()
+      : registrySkillMdContent.trim()) ||
     skill.description;
   const translationCacheKey = `storedoc_v2_${skill.slug}_${targetLang}_${translationMode}`;
   const translationFingerprint = useMemo(
@@ -175,15 +190,36 @@ export function SkillStoreDetail({
     [effectiveSkillMdContent, skill.description],
   );
   const installed = isInstalled || justInstalled;
-  const canShowUpdateActions = installed && Boolean(skill.content_url || skill.content);
-  const variantBadges = useMemo(
-    () =>
-      buildSkillVariantBadges(skill, t, {
-        hasUpdate: updateStatus === "update-available",
-        isInstalled: installed,
-      }),
-    [installed, skill, t, updateStatus],
+  const canShowUpdateActions =
+    installed && Boolean(skill.content_url || skill.content);
+  const installableSkill = useMemo(
+    () => ({
+      ...skill,
+      source_label: storeLabel || skill.source_label,
+    }),
+    [skill, storeLabel],
   );
+  const variantBadges = useMemo(() => {
+    const badges = buildSkillVariantBadges(skill, t, {
+      hasUpdate: updateStatus === "update-available",
+      isInstalled: installed,
+    });
+    if (!storeLabel) {
+      return badges;
+    }
+
+    return [
+      {
+        key: "store-source",
+        label: storeLabel,
+        title: skill.source_label || skill.source_url,
+        tone: badges[0]?.tone || "git",
+      },
+      ...badges.filter(
+        (badge) => badge.tone === "installed" || badge.tone === "update",
+      ),
+    ];
+  }, [installed, skill, storeLabel, t, updateStatus]);
   const sourceDebugLabel = useMemo(
     () => inferSkillVariantSourceDebugLabel(skill),
     [skill],
@@ -203,7 +239,10 @@ export function SkillStoreDetail({
       setSafetyReport(report);
       // If already installed, persist to DB
       const installedSkill = skills.find(
-        (s) => s.source_id === skill.source_id,
+        (s) =>
+          s.source_id === skillSourceKey ||
+          s.registry_slug === skill.slug ||
+          s.name === skill.slug,
       );
       if (installedSkill) {
         try {
@@ -378,7 +417,7 @@ export function SkillStoreDetail({
     setIsInstalling(true);
     try {
       const performInstall = async () => {
-        const result = await installRegistrySkill(skill);
+        const result = await installRegistrySkill(installableSkill);
         if (result) {
           setJustInstalled(true);
           showToast(
@@ -420,7 +459,7 @@ export function SkillStoreDetail({
   const handleUninstall = async () => {
     setIsUninstalling(true);
     try {
-      const success = await uninstallRegistrySkill(skill.source_id);
+      const success = await uninstallRegistrySkill(skillSourceKey);
       if (success) {
         setJustUninstalled(true);
         showToast(
@@ -449,15 +488,24 @@ export function SkillStoreDetail({
         check.status === "update-available"
           ? t("skill.updateAvailable", "Update available")
           : check.status === "conflict"
-            ? t("skill.updateConflict", "Local changes conflict with the store update")
+            ? t(
+                "skill.updateConflict",
+                "Local changes conflict with the store update",
+              )
             : check.status === "local-modified"
               ? t("skill.localModified", "Local changes detected")
               : check.status === "up-to-date"
                 ? t("skill.upToDate", "Already up to date")
                 : t("skill.notInstalled", "Not installed");
-      showToast(message, check.status === "update-available" ? "success" : "info");
+      showToast(
+        message,
+        check.status === "update-available" ? "success" : "info",
+      );
     } catch (error) {
-      showToast(`${t("skill.updateCheckFailed", "Update check failed")}: ${getErrorMessage(error)}`, "error");
+      showToast(
+        `${t("skill.updateCheckFailed", "Update check failed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
     } finally {
       setIsCheckingUpdate(false);
     }
@@ -466,7 +514,7 @@ export function SkillStoreDetail({
   const handleUpdate = async (overwriteLocalChanges = false) => {
     setIsUpdating(true);
     try {
-      const result = await updateRegistrySkill(skill.source_id, {
+      const result = await updateRegistrySkill(skillSourceKey, {
         overwriteLocalChanges,
       });
       if (!result) {
@@ -475,18 +523,30 @@ export function SkillStoreDetail({
       }
       setUpdateStatus(result.status);
       if (result.status === "updated") {
-        showToast(`${t("skill.updateSuccess", "Updated")}: ${skill.name}`, "success");
+        showToast(
+          `${t("skill.updateSuccess", "Updated")}: ${skill.name}`,
+          "success",
+        );
         return;
       }
       if (result.status === "conflict" || result.status === "local-modified") {
-        showToast(t("skill.updateConflict", "Local changes conflict with the store update"), "warning");
+        showToast(
+          t(
+            "skill.updateConflict",
+            "Local changes conflict with the store update",
+          ),
+          "warning",
+        );
         return;
       }
       if (result.status === "up-to-date") {
         showToast(t("skill.upToDate", "Already up to date"), "info");
       }
     } catch (error) {
-      showToast(`${t("skill.updateFailed", "Failed")}: ${getErrorMessage(error)}`, "error");
+      showToast(
+        `${t("skill.updateFailed", "Failed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
     } finally {
       setIsUpdating(false);
     }
@@ -518,11 +578,11 @@ export function SkillStoreDetail({
             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
               {resolvedDescription}
             </p>
-            <SkillVariantBadgeList badges={variantBadges} className="mt-2 flex flex-wrap gap-1.5" />
+            <SkillVariantBadgeList
+              badges={variantBadges}
+              className="mt-2 flex flex-wrap gap-1.5"
+            />
             <div className="flex items-center gap-3 mt-2">
-              <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">
-                v{skill.version}
-              </span>
               <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
                 <GlobeIcon className="w-3 h-3" />
                 {skill.author}
@@ -585,7 +645,9 @@ export function SkillStoreDetail({
             if (showTranslation && translatedRenderedContent) {
               // Immersive mode: interleaved original + translation
               if (translationMode === "immersive") {
-                const segments = renderImmersiveSegments(translatedRenderedContent);
+                const segments = renderImmersiveSegments(
+                  translatedRenderedContent,
+                );
                 return (
                   <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:text-foreground prose-h1:text-base prose-h1:font-bold prose-h2:text-sm prose-h2:font-semibold prose-h3:text-xs prose-h3:font-semibold prose-p:text-foreground/80 prose-p:text-[13px] prose-strong:text-foreground prose-li:text-foreground/80 prose-li:text-[13px] prose-code:text-primary prose-pre:bg-muted prose-pre:border prose-pre:border-border text-[13px]">
                     <div className="markdown-body">
@@ -873,13 +935,17 @@ export function SkillStoreDetail({
                       )}
                       {t("skill.update", "Update")}
                     </button>
-                    {(updateStatus === "conflict" || updateStatus === "local-modified") && (
+                    {(updateStatus === "conflict" ||
+                      updateStatus === "local-modified") && (
                       <button
                         onClick={() => handleUpdate(true)}
                         disabled={isUpdating}
                         className="px-3 py-2 text-xs bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 rounded-lg transition-colors disabled:opacity-50"
                       >
-                        {t("skill.overwriteLocalChanges", "Overwrite local changes")}
+                        {t(
+                          "skill.overwriteLocalChanges",
+                          "Overwrite local changes",
+                        )}
                       </button>
                     )}
                   </>
@@ -941,7 +1007,7 @@ export function SkillStoreDetail({
             setPendingHighRiskInstallReport(null);
             setIsInstalling(true);
             try {
-              const result = await installRegistrySkill(skill);
+              const result = await installRegistrySkill(installableSkill);
               if (result) {
                 setJustInstalled(true);
                 showToast(
@@ -1002,7 +1068,10 @@ export function SkillStoreDetail({
           setShowRetranslatePrompt(false);
           void handleRefreshTranslation();
         }}
-        title={t("skill.translationOutdatedTitle", "Saved translation is outdated")}
+        title={t(
+          "skill.translationOutdatedTitle",
+          "Saved translation is outdated",
+        )}
         message={t(
           "skill.translationOutdatedMessage",
           "This skill's SKILL.md changed after the last translation. Retranslate now?",

@@ -46,6 +46,7 @@ const requiredPaths = [
   "skill.sourceGithubRepo",
   "skill.sourceGithubStore",
   "skill.sourceLocalFolder",
+  "skill.sourceRemoteGitRepo",
   "skill.sourceRemoteLink",
   "skill.sourceRemoteStore",
 ] as const;

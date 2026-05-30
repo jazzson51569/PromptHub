@@ -52,6 +52,21 @@ function sanitizeSkillName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9-]/g, "");
 }
 
+function getRegistrySelectionKey(skill: Pick<RegistrySkill, "source_id" | "source_url" | "slug">): string {
+  return skill.source_id || skill.source_url || skill.slug;
+}
+
+function isRegistrySkillInstalled(
+  skill: Pick<RegistrySkill, "source_id" | "source_url" | "slug">,
+  installedKeys: Set<string>,
+): boolean {
+  return Boolean(
+    (skill.source_id && installedKeys.has(skill.source_id)) ||
+      (skill.source_url && installedKeys.has(skill.source_url)) ||
+      installedKeys.has(getRegistrySelectionKey(skill)),
+  );
+}
+
 export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   const { t } = useTranslation();
   const runtimeCapabilities = getRuntimeCapabilities();
@@ -175,18 +190,18 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
   );
   const installedGitHubSources = useMemo(() => {
     return new Set(
-      existingSkills
-        .map((skill) => skill.source_url)
-        .filter(
+      existingSkills.flatMap((skill) =>
+        [skill.source_id, skill.source_url].filter(
           (value): value is string =>
             typeof value === "string" && value.trim().length > 0,
         ),
+      ),
     );
   }, [existingSkills]);
   const annotatedGitHubResults = useMemo(() => {
     return githubScanResults.map((skill) => ({
       ...skill,
-      isImported: installedGitHubSources.has(skill.source_url),
+      isImported: isRegistrySkillInstalled(skill, installedGitHubSources),
     }));
   }, [githubScanResults, installedGitHubSources]);
   const selectableGitHubResults = useMemo(
@@ -508,8 +523,8 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
       setSelectedGitHubSkills(
         new Set(
           scannedSkills
-            .filter((skill) => !installedGitHubSources.has(skill.source_url))
-            .map((skill) => skill.slug),
+            .filter((skill) => !isRegistrySkillInstalled(skill, installedGitHubSources))
+            .map((skill) => getRegistrySelectionKey(skill)),
         ),
       );
       setGithubScanDone(true);
@@ -525,13 +540,13 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
     }
   };
 
-  const toggleGitHubSkill = (slug: string) => {
+  const toggleGitHubSkill = (selectionKey: string) => {
     setSelectedGitHubSkills((prev) => {
       const next = new Set(prev);
-      if (next.has(slug)) {
-        next.delete(slug);
+      if (next.has(selectionKey)) {
+        next.delete(selectionKey);
       } else {
-        next.add(slug);
+        next.add(selectionKey);
       }
       return next;
     });
@@ -539,7 +554,7 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
 
   const handleImportSelectedGitHubSkills = async () => {
     const targets = annotatedGitHubResults.filter(
-      (skill) => !skill.isImported && selectedGitHubSkills.has(skill.slug),
+      (skill) => !skill.isImported && selectedGitHubSkills.has(getRegistrySelectionKey(skill)),
     );
     if (targets.length === 0) {
       return;
@@ -1154,20 +1169,20 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                         type="button"
                         onClick={() => {
                           const allSelected = selectableGitHubResults.every((skill) =>
-                            selectedGitHubSkills.has(skill.slug),
+                            selectedGitHubSkills.has(getRegistrySelectionKey(skill)),
                           );
                           setSelectedGitHubSkills(
                             allSelected
                               ? new Set()
                               : new Set(
-                                  selectableGitHubResults.map((skill) => skill.slug),
+                                  selectableGitHubResults.map((skill) => getRegistrySelectionKey(skill)),
                                 ),
                           );
                         }}
                         className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent rounded-md transition-colors"
                       >
                         {selectableGitHubResults.every((skill) =>
-                          selectedGitHubSkills.has(skill.slug),
+                          selectedGitHubSkills.has(getRegistrySelectionKey(skill)),
                         ) ? (
                           <>
                             <CheckSquareIcon className="w-3.5 h-3.5" />
@@ -1188,13 +1203,14 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                     >
                       <div className="grid grid-cols-1 gap-3">
                         {annotatedGitHubResults.map((skill) => {
-                          const isSelected = selectedGitHubSkills.has(skill.slug);
+                          const selectionKey = getRegistrySelectionKey(skill);
+                          const isSelected = selectedGitHubSkills.has(selectionKey);
                           return (
                             <button
-                              key={skill.slug}
+                              key={selectionKey}
                               type="button"
                               onClick={() =>
-                                !skill.isImported && toggleGitHubSkill(skill.slug)
+                                !skill.isImported && toggleGitHubSkill(selectionKey)
                               }
                               disabled={skill.isImported}
                               className={`w-full rounded-2xl border p-4 text-left transition-all shadow-sm ${
@@ -1222,11 +1238,6 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                                         <h4 className="font-semibold text-sm truncate">
                                           {skill.name}
                                         </h4>
-                                        {skill.version && (
-                                          <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                            v{skill.version}
-                                          </span>
-                                        )}
                                         {skill.isImported && (
                                           <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-accent text-muted-foreground shrink-0">
                                             {t(
@@ -1846,11 +1857,6 @@ export function CreateSkillModal({ isOpen, onClose }: CreateSkillModalProps) {
                                       <h4 className="font-semibold text-sm truncate">
                                         {skill.name}
                                       </h4>
-                                      {skill.version && (
-                                        <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                                          v{skill.version}
-                                        </span>
-                                      )}
                                       {skill.isImported && (
                                         <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] rounded bg-accent text-muted-foreground shrink-0">
                                           {t(
