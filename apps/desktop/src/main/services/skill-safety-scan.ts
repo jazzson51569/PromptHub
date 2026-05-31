@@ -15,6 +15,8 @@ import { isInternalSkillRepoEntry } from "./skill-installer-repo";
 const MAX_SCAN_DEPTH = 5;
 const MAX_SCAN_FILES = 200;
 const MAX_TEXT_FILE_BYTES = 256 * 1024;
+const MAX_AI_PROMPT_CONTENT_CHARS = 64 * 1024;
+const MAX_AI_FILE_CONTENT_CHARS = 8 * 1024;
 const TRUSTED_HOSTS = new Set([
   "github.com",
   "raw.githubusercontent.com",
@@ -649,6 +651,11 @@ interface AIReportRaw {
   summary?: unknown;
 }
 
+interface PackagePromptContent {
+  section: string;
+  coverage: string;
+}
+
 function isValidSeverity(v: unknown): v is "info" | "warn" | "high" {
   return v === "info" || v === "warn" || v === "high";
 }
@@ -723,9 +730,114 @@ function parseAIReport(
   };
 }
 
+function formatPreflightFindings(findings: SkillSafetyFinding[]): string {
+  return findings
+    .map((finding) => {
+      const pieces = [
+        `- code: ${finding.code}`,
+        `severity: ${finding.severity}`,
+        `title: ${finding.title}`,
+        `detail: ${finding.detail}`,
+      ];
+      if (finding.filePath) {
+        pieces.push(`file: ${finding.filePath}`);
+      }
+      if (finding.evidence) {
+        pieces.push(`evidence: ${finding.evidence}`);
+      }
+      return pieces.join(" | ");
+    })
+    .join("\n");
+}
+
+function shouldIncludeFileContent(file: SkillLocalFileEntry): boolean {
+  return (
+    !file.isDirectory && Boolean(file.content) && !file.content.startsWith("[")
+  );
+}
+
+function buildPackagePromptContent(
+  files: SkillLocalFileEntry[],
+): PackagePromptContent | null {
+  const reviewFiles = files
+    .filter((file) => !file.isDirectory && !isInternalSkillRepoEntry(file.path))
+    .sort((a, b) => a.path.localeCompare(b.path));
+
+  if (reviewFiles.length === 0) {
+    return null;
+  }
+
+  let remainingBudget = MAX_AI_PROMPT_CONTENT_CHARS;
+  let includedCount = 0;
+  let truncatedCount = 0;
+  let metadataOnlyCount = 0;
+  let omittedCount = 0;
+  const sections: string[] = [];
+
+  for (const file of reviewFiles) {
+    if (!shouldIncludeFileContent(file)) {
+      metadataOnlyCount += 1;
+      sections.push(
+        `### ${file.path}\n${file.content || "[content unavailable]"}`,
+      );
+      continue;
+    }
+
+    if (remainingBudget <= 0) {
+      omittedCount += 1;
+      continue;
+    }
+
+    const maxForFile = Math.min(MAX_AI_FILE_CONTENT_CHARS, remainingBudget);
+    const content = file.content.slice(0, maxForFile);
+    const wasTruncated =
+      file.content.length > content.length ||
+      file.content.length > MAX_AI_FILE_CONTENT_CHARS;
+
+    includedCount += 1;
+    if (wasTruncated) {
+      truncatedCount += 1;
+    }
+
+    sections.push(
+      [
+        `### ${file.path}`,
+        "```",
+        content,
+        "```",
+        wasTruncated ? "[Content truncated for scan prompt budget]" : undefined,
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+
+    remainingBudget -= content.length;
+  }
+
+  const coverageLines = [
+    `Reviewable package files: ${reviewFiles.length}`,
+    `Content included for AI review: ${includedCount}`,
+    `Metadata-only or unavailable content entries: ${metadataOnlyCount}`,
+    `Files with truncated content: ${truncatedCount}`,
+    `Files omitted after content budget was exhausted: ${omittedCount}`,
+  ];
+
+  if (truncatedCount > 0 || omittedCount > 0) {
+    coverageLines.push(
+      "Content truncated for scan prompt budget; repository file tree remains complete for scanned entries.",
+    );
+  }
+
+  return {
+    section: sections.join("\n\n"),
+    coverage: coverageLines.join("\n"),
+  };
+}
+
 /**
  * Build the user prompt for AI safety analysis.
- * Includes SKILL.md content, file list, and suspicious file contents.
+ * Includes SKILL.md content, file list, preflight findings, and package file
+ * contents within a deterministic prompt budget.
  */
 function buildAIUserPrompt(
   input: SkillSafetyScanInput,
@@ -747,25 +859,15 @@ function buildAIUserPrompt(
   }
 
   if (input.securityAudits?.length) {
-    parts.push(`## Marketplace Audit Metadata\n${input.securityAudits.join("\n")}`);
+    parts.push(
+      `## Marketplace Audit Metadata\n${input.securityAudits.join("\n")}`,
+    );
   }
 
   if (preflightFindings.length > 0) {
-    const preflightSummary = preflightFindings
-      .map((finding) => {
-        const pieces = [
-          `- code: ${finding.code}`,
-          `severity: ${finding.severity}`,
-          `title: ${finding.title}`,
-          `detail: ${finding.detail}`,
-        ];
-        if (finding.evidence) {
-          pieces.push(`evidence: ${finding.evidence}`);
-        }
-        return pieces.join(" | ");
-      })
-      .join("\n");
-    parts.push(`## Preflight Validation Findings\n${preflightSummary}`);
+    parts.push(
+      `## Preflight Validation Findings\n${formatPreflightFindings(preflightFindings)}`,
+    );
   }
 
   if (input.content) {
@@ -773,28 +875,18 @@ function buildAIUserPrompt(
   }
 
   if (repoFiles.length > 0) {
-    const fileList = repoFiles
+    const reviewEntries = repoFiles.filter(
+      (file) => !isInternalSkillRepoEntry(file.path),
+    );
+    const fileList = reviewEntries
       .map((f) => (f.isDirectory ? `📁 ${f.path}/` : `📄 ${f.path}`))
       .join("\n");
     parts.push(`## Repository File Tree\n${fileList}`);
 
-    // Include content of suspicious files (scripts, configs)
-    const suspiciousFiles = repoFiles.filter((f) => {
-      if (f.isDirectory || !f.content || f.content.startsWith("[")) {
-        return false;
-      }
-      const ext = path.extname(f.path).toLowerCase();
-      return SCRIPT_FILE_EXTENSIONS.has(ext) || f.path === "SKILL.md";
-    });
-
-    if (suspiciousFiles.length > 0) {
-      const fileContents = suspiciousFiles
-        .slice(0, 10) // Limit to avoid token overflow
-        .map(
-          (f) => `### ${f.path}\n\`\`\`\n${f.content!.slice(0, 4096)}\n\`\`\``,
-        )
-        .join("\n\n");
-      parts.push(`## File Contents (scripts and configs)\n${fileContents}`);
+    const packageContent = buildPackagePromptContent(reviewEntries);
+    if (packageContent) {
+      parts.push(`## Package Content Coverage\n${packageContent.coverage}`);
+      parts.push(`## Package File Contents\n${packageContent.section}`);
     }
   }
 
@@ -855,9 +947,13 @@ export async function scanSkillSafety(
 
   let checkedFileCount = input.content ? 1 : 0;
   let repoFiles: SkillLocalFileEntry[] = [];
+  const repoFindings: SkillSafetyFinding[] = [];
   if (input.localRepoPath) {
     repoFiles = await readRepoFiles(input.localRepoPath);
-    checkedFileCount = Math.max(checkedFileCount, scanRepoFiles(repoFiles, []));
+    checkedFileCount = Math.max(
+      checkedFileCount,
+      scanRepoFiles(repoFiles, repoFindings),
+    );
   }
 
   // Preserve source validation as a hard preflight guard, but do not return a
@@ -865,6 +961,7 @@ export async function scanSkillSafety(
   // report, while blocked internal sources fail before the model call.
   const preflightFindings: SkillSafetyFinding[] = [];
   await scanSourceUrls(input, preflightFindings, resolveAddress);
+  preflightFindings.push(...repoFindings);
 
   if (
     !input.localRepoPath &&

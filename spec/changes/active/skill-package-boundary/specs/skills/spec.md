@@ -56,6 +56,22 @@ Then PromptHub scans the managed local package files with the configured AI mode
 And the blocked/internal source is surfaced as provenance context for review
 And the scan does not fail with `SAFETY_SCAN_BLOCKED_SOURCE`.
 
+#### Scenario: AI review receives full package text evidence
+
+Given a managed Skill package contains `SKILL.md`, scripts, docs, references, and other text resources
+When PromptHub runs safety scan for that installed Skill
+Then the AI scan prompt includes the repository file tree
+And includes every readable package text file content within the deterministic scan prompt budget
+And includes explicit truncation or omission notices when the budget is exhausted
+And does not silently narrow the review to `SKILL.md` or script extensions only.
+
+#### Scenario: Repository structure findings are review evidence
+
+Given a managed Skill package contains high-risk repository structure such as workflow files, launch agent files, or executable artifacts
+When PromptHub runs safety scan
+Then deterministic repository preflight findings are included in the AI prompt with code, severity, title, detail, and file path
+And the final scan still uses the configured AI model as the unified review path.
+
 #### Scenario: Remote pre-install scan has an internal source host
 
 Given a store entry is not installed locally
@@ -77,3 +93,5 @@ The existing `SKILL.md` contract is narrowed to mean entrypoint file contract. I
 - For custom Git/Gitea sources, tests must cover non-GitHub clone-backed sources, not only GitHub raw file APIs.
 - Safety scan and file browser tests must verify downstream consumers read the managed repository path and nested package files.
 - Safety scan tests must distinguish remote pre-install source checks from installed managed-package scans.
+- Safety scan tests must use prompt-sensitive AI mocks so a test fails when package file content or preflight evidence is omitted from the AI request.
+- Safety scan tests must cover ordinary docs/reference files, repository preflight findings, large package budget/truncation behavior, and symlink/path escape filtering.

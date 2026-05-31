@@ -18,5 +18,11 @@
 - [x] Verify safety scan and file browser consume managed package directories after install.
 - [x] Fix installed custom Gitea safety scans so internal source provenance does not block managed local package scanning.
 - [x] Add safety scan regression tests for installed managed packages with internal Gitea source URLs and pre-install blocked source behavior.
+- [x] Audit safety scan prompt construction for full-package content coverage.
+- [x] Add prompt-sensitive tests proving ordinary docs/reference files are sent to AI, not only `SKILL.md` and scripts.
+- [x] Add tests proving repository preflight findings are passed to AI as review evidence.
+- [x] Add large-package prompt budget and truncation tests.
+- [x] Add real filesystem symlink escape filtering coverage for safety scan.
+- [x] Add batch installed scan test proving renderer store passes `local_repo_path` to main safety scan.
 - [x] Strengthen project TDD and coverage rules to require 100% line/function/branch/condition coverage for new and changed production code.
 - [x] Sync final behavior back to stable docs after implementation.

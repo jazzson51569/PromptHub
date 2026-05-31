@@ -1312,6 +1312,38 @@ description: Use this skill for PDF tasks.
     expect(scanSafety).toHaveBeenCalledTimes(4);
   });
 
+  it("passes installed local repo paths into batch safety scans", async () => {
+    const scanSafety = vi.fn().mockResolvedValue({ level: "safe" });
+    (window as any).api.skill.scanSafety = scanSafety;
+
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-1",
+          name: "managed-package",
+          instructions: "# Managed Package",
+          source_url: "https://gitea.internal.example/team/skills",
+          content_url:
+            "https://gitea.internal.example/team/skills/raw/branch/main/SKILL.md",
+          local_repo_path: "/managed/skills/managed-package--abc123",
+        }),
+      ],
+    });
+
+    await useSkillStore.getState().scanInstalledSkillSafety(["skill-1"]);
+
+    expect(scanSafety).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "managed-package",
+        content: "# Managed Package",
+        sourceUrl: "https://gitea.internal.example/team/skills",
+        contentUrl:
+          "https://gitea.internal.example/team/skills/raw/branch/main/SKILL.md",
+        localRepoPath: "/managed/skills/managed-package--abc123",
+      }),
+    );
+  });
+
   describe("remoteStoreEntries cache and persistence", () => {
     it("setRemoteStoreEntry stores skills with loadedAt and error fields", () => {
       const skills = [

@@ -32,6 +32,11 @@ Read:
 - Added a built-in `prompthub-cli-operator` Skill that teaches agents to inspect and operate PromptHub via CLI commands, including `prompthub skill repo-files` and safety rules for destructive operations.
 - Tightened package install atomicity: if a registry entry requires clone-backed package persistence and that persistence fails, PromptHub now rolls back the just-created DB skill and surfaces the install error instead of leaving a half-installed `SKILL.md`-only skill.
 - Strengthened `AGENTS.md`, `spec/rules/testing-standards.md`, and `spec/rules/tdd-design-gate.md` so new or changed production code targets 100% line, function, branch, and condition coverage, with critical boundary modules requiring 100% branch and condition coverage for touched behavior.
+- Audited and tightened full-package safety scan prompt construction:
+  - Ordinary text files such as `docs/*.md` and `references/*.md` are now included in the AI prompt, not just `SKILL.md` and script/config extensions.
+  - Repository structure and static content findings from the local package scan are preserved as preflight evidence in the AI prompt instead of being discarded after file counting.
+  - Package prompt content is bounded by deterministic per-file and total content budgets, with explicit truncation/omission notices so large packages fail visibly instead of silently narrowing review scope.
+  - Safety scan keeps symlink/path escape filtering in the real filesystem reader; the regression test verifies escaped symlink content is not included in the scan prompt.
 
 ## Verification
 
@@ -46,6 +51,21 @@ Read:
 - Package and installed-state regression pass after the Claude Code installed-state fix:
   - `pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-store-installed-state.test.tsx tests/unit/stores/skill-registry-selectors.test.ts tests/unit/services/skill-store-update.test.ts tests/unit/main/skill-installer-remote-git-package.test.ts tests/unit/main/skill-local-repo-ipc.test.ts tests/unit/stores/skill.store.test.ts`
   - Passed: 6 files, 60 tests.
+- Full-package safety scan prompt regression:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/main/skill-safety-scan.test.ts`
+  - Passed: 1 file, 13 tests.
+- Installed batch safety scan regression:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/stores/skill.store.test.ts`
+  - Passed: 1 file, 42 tests.
+- Full desktop Vitest suite:
+  - `pnpm --filter @prompthub/desktop test:run`
+  - Failed: 12 files failed, 170 passed; 26 tests failed, 1521 passed.
+  - Observed failures are outside the safety scan change area: `top-bar.test.tsx`, `skill-store-custom-sources.test.tsx`, `skill-filter*.test.ts`, `skill-platform-sync.test.ts`, `skill-stats.test.ts`, `skill-db-versioning.test.ts`, and integration tests whose `settings.store` mocks are missing newer exports.
+- Type and lint:
+  - `pnpm --filter @prompthub/desktop typecheck`
+  - Passed.
+  - `pnpm --filter @prompthub/desktop lint`
+  - Passed.
 
 Regression coverage added:
 
@@ -62,6 +82,8 @@ Regression coverage added:
   - Installed Skills with `local_repo_path` are scanned from the managed package directory even when their custom Gitea source URL is internal; the source issue is passed to AI as provenance context.
   - Store detail safety scan now uses the installed Skill content and `local_repo_path` when the store entry is already imported, so nested package files participate in the AI scan.
 - Added safety scan regressions for installed internal-Gitea packages and for store detail passing the managed package path.
+- Added prompt-sensitive safety scan coverage for ordinary package docs/reference files, repository preflight evidence, prompt budget/truncation behavior, and real filesystem symlink escape filtering.
+- Added store batch scan coverage for preserving `local_repo_path` when scanning installed managed packages.
 
 ## Docs Synced
 
