@@ -63,6 +63,24 @@
    - 影响：同一个 Git repository 中若扫描出同 slug / 同名但不同目录或不同 canonical path 的 skill，会出现选择联动、跳过错误或安装态误判。
    - 本轮修复：direct Git import 已改为优先 `source_id`，同时保留 `source_url` 兼容历史已安装记录。
 
+3. **Claude Code Store list grouping still used source-id-only installed state**
+   - 位置：`apps/desktop/src/renderer/components/skill/SkillStore.tsx`、`apps/desktop/src/renderer/stores/skill.store.ts`、`apps/desktop/src/renderer/services/skill-store-update.ts`
+   - 原问题：详情和更新检查已经有较宽的 canonical identity 匹配，但 store 列表和 store selector 仍然只按当前 `source_id` 分组。
+   - 影响：当 Claude Code remote source 刷新后 `source_id` 变化，或历史已安装记录只保留 `content_url` / `source_url` / legacy `registry_slug` 时，列表页会把已导入 skill 放回 Available。
+   - 本轮修复：`SkillStore.isSkillInstalled()`、`getRecommendedSkills()`、`getFilteredRegistrySkills()` 统一复用 `findInstalledRegistrySkill()`。
+   - 同时收紧 `findInstalledRegistrySkill()` 的 legacy `registry_slug` fallback：如果本地 skill 已有明确 `source_id` / `content_url` / `source_url`，不允许 registry slug fallback 覆盖显式 source mismatch，避免同 slug 不同 branch/source 被误标为已导入。
+
+### Verification Added For Claude Code Installed State
+
+- `apps/desktop/tests/unit/services/skill-store-update.test.ts`
+  - 覆盖 legacy install 通过 `content_url` 匹配刷新后的 remote entry。
+  - 覆盖同 display name 不同 source 不允许误匹配。
+  - 覆盖同 `registry_slug` 但显式 `source_id` 不同不允许 fallback 误匹配。
+- `apps/desktop/tests/unit/stores/skill-registry-selectors.test.ts`
+  - 覆盖 store selector 的 Installed / Recommended 分组使用 canonical identity。
+- `apps/desktop/tests/unit/components/skill-store-installed-state.test.tsx`
+  - 黑盒覆盖 Claude Code Store 列表页：历史导入的同一 skill 显示 `Imported`，同 install name 的另一个 package 仍显示可导入。
+
 ### Severe Gaps (Must Be Explicitly Tracked)
 
 1. **`local-dir` source is path-aware, not branch-aware**

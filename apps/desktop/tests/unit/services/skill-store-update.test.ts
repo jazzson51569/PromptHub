@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeSkillContentHash,
+  findInstalledRegistrySkill,
   getRegistrySkillUpdateStatus,
 } from "../../../src/renderer/services/skill-store-update";
 import { createSkillFixture } from "../../fixtures/skills";
@@ -20,6 +21,67 @@ const registrySkill: RegistrySkill = {
 };
 
 describe("skill store update detection", () => {
+  describe("findInstalledRegistrySkill", () => {
+    it("matches a legacy install by content URL when the remote source id changes", () => {
+      const installedSkill = createSkillFixture({
+        id: "skill-legacy-writer",
+        name: "writer",
+        registry_slug: "writer",
+        content_url: registrySkill.content_url,
+      });
+
+      const match = findInstalledRegistrySkill([installedSkill], {
+        ...registrySkill,
+        source_id: "claude-code:writer:new-source-id",
+      });
+
+      expect(match?.id).toBe("skill-legacy-writer");
+    });
+
+    it("does not match skills by display name alone across different sources", () => {
+      const installedSkill = createSkillFixture({
+        id: "skill-stable-writer",
+        name: "writer",
+        registry_slug: "stable-writer",
+        source_id: "claude-code:stable-writer",
+        source_url: "https://github.com/anthropics/skills/tree/main/stable-writer",
+        content_url:
+          "https://raw.githubusercontent.com/anthropics/skills/main/stable-writer/SKILL.md",
+      });
+
+      const match = findInstalledRegistrySkill([installedSkill], {
+        ...registrySkill,
+        slug: "fork-writer",
+        name: "Writer",
+        install_name: "writer",
+        source_id: "custom-gitea:fork-writer",
+        source_url: "https://gitea.example.com/team/skills/src/branch/main/fork-writer",
+        content_url:
+          "https://gitea.example.com/team/skills/raw/branch/main/fork-writer/SKILL.md",
+      });
+
+      expect(match).toBeNull();
+    });
+
+    it("does not let a registry slug fallback override an explicit source id mismatch", () => {
+      const installedSkill = createSkillFixture({
+        id: "skill-main-writer",
+        name: "writer",
+        registry_slug: "writer",
+        source_id: "source-main-writer",
+      });
+
+      const match = findInstalledRegistrySkill([installedSkill], {
+        ...registrySkill,
+        slug: "writer",
+        source_id: "source-dev-writer",
+        source_url: "https://github.com/example/skills/tree/dev/writer",
+      });
+
+      expect(match).toBeNull();
+    });
+  });
+
   it("normalizes line endings and frontmatter order before hashing", async () => {
     const first = await computeSkillContentHash(
       "---\nname: writer\ndescription: Write better\n---\n\n# Writer\r\n",

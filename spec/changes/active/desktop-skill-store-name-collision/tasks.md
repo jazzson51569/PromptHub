@@ -23,6 +23,8 @@
 - [x] 按完整 source taxonomy 重跑白盒：覆盖 built-in registry、built-in remote stores、`skills-sh`、custom stores、direct Git import、local scan、project scan、JSON import、backup restore、managed repo edit、project/platform output。
 - [x] 修复 `skills-sh` source identity：为 `parseSkillsShDetail()` 产出稳定 `source_id`，并补同名/refresh/installed 判断测试。
 - [x] 修复 direct Git import 的选择和已导入判断：从 `slug/source_url` 切换为 `source_id`，并覆盖同 repo 同 slug 不同目录场景。
+- [x] 修复 Claude Code Store 列表页安装态漂移：列表分组与 store selector 统一使用 canonical identity，而不是只看当前 `source_id`。
+- [x] 补充回归测试：历史导入记录仅能通过 `content_url` 匹配时，Claude Code Store 仍显示 `Imported`，同名不同来源仍显示可导入。
 - [ ] 补充组合测试：direct Git import 与 persisted git store source 的同名、同源、refresh、Imported 判断语义。
 - [ ] 补充组合测试：local scan / project scan 导入后再 deploy / rescan，不产生循环导入或错误 source identity。
 - [ ] 补充组合测试：managed repo 文件编辑、repo sync、version restore 后保留原 `source_id`，并正确刷新 `directory_fingerprint`。

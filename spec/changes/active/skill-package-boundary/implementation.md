@@ -43,6 +43,9 @@ Read:
   - Passed: 2 files, 10 tests.
 - After formatting: `pnpm --filter @prompthub/desktop test:run tests/unit/services/skill-registry-builtins.test.ts tests/unit/components/create-skill-modal.test.tsx tests/unit/main/skill-installer.test.ts tests/unit/stores/skill.store.test.ts tests/unit/main/skill-safety-scan.test.ts tests/unit/components/skill-file-editor.test.tsx`
   - Passed: 6 files, 205 tests.
+- Package and installed-state regression pass after the Claude Code installed-state fix:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-store-installed-state.test.tsx tests/unit/stores/skill-registry-selectors.test.ts tests/unit/services/skill-store-update.test.ts tests/unit/main/skill-installer-remote-git-package.test.ts tests/unit/main/skill-local-repo-ipc.test.ts tests/unit/stores/skill.store.test.ts`
+  - Passed: 6 files, 60 tests.
 
 Regression coverage added:
 

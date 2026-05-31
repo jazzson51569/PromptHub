@@ -1645,19 +1645,16 @@ export const useSkillStore = create<SkillState>()(
       },
 
       getRecommendedSkills: () => {
-        const installedSlugs = get().getInstalledSlugs();
-        return get().registrySkills.filter(
-          (s) => !installedSlugs.includes(s.source_id),
+        const { skills, registrySkills } = get();
+        return registrySkills.filter(
+          (registrySkill) =>
+            !findInstalledRegistrySkill(skills, registrySkill),
         );
       },
 
       getFilteredRegistrySkills: () => {
         const { registrySkills, skills, storeCategory, storeSearchQuery } =
           get();
-        const installedSlugs = skills
-          .filter((s) => s.source_id)
-          .map((s) => s.source_id!);
-
         let filtered = registrySkills;
 
         // Category filter
@@ -1676,11 +1673,12 @@ export const useSkillStore = create<SkillState>()(
           );
         }
 
-        const installed = filtered.filter((s) =>
-          installedSlugs.includes(s.source_id),
+        const installed = filtered.filter((registrySkill) =>
+          findInstalledRegistrySkill(skills, registrySkill),
         );
         const recommended = filtered.filter(
-          (s) => !installedSlugs.includes(s.source_id),
+          (registrySkill) =>
+            !findInstalledRegistrySkill(skills, registrySkill),
         );
 
         return { installed, recommended };

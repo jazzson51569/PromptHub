@@ -161,12 +161,6 @@ export function SkillStore() {
     (state) => state.autoScanStoreSkillsBeforeInstall,
   );
   const aiModels = useSettingsStore((state) => state.aiModels);
-  const installedSlugs = useMemo(() => {
-    return skills
-      .filter((skill) => skill.source_id)
-      .map((skill) => skill.source_id!);
-  }, [skills]);
-
   const selectedCustomSource = useMemo(
     () =>
       customStoreSources.find(
@@ -221,9 +215,9 @@ export function SkillStore() {
 
   const isSkillInstalled = useCallback(
     (regSkill: RegistrySkill): boolean => {
-      return installedSlugs.includes(regSkill.source_id);
+      return Boolean(findInstalledRegistrySkill(skills, regSkill));
     },
-    [installedSlugs],
+    [skills],
   );
 
   const hasPotentialUpdate = useCallback(
