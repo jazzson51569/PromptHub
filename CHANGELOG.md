@@ -1,5 +1,28 @@
 ## [Unreleased]
 
+## [0.5.8-beta.1] - 2026-06-01
+
+### 新功能 / Features
+
+- 🖼️ **图片 Prompt 反推工作流**：新增独立的图片反推入口，可通过视觉模型把参考图反推出结构化生图 Prompt，并支持把原图作为参考图一并保存
+  - **Image Prompt Reverse Workflow**: Added a dedicated image prompt reverse flow that uses a vision-capable model to turn a reference image into a structured image-generation prompt, with optional reference-image persistence
+- 🧠 **AI 模型服务重构**：模型服务改为供应商优先的三栏配置体验，区分供应商实例、模型能力和业务路由，支持视觉、生图、推理等能力标记
+  - **AI Model Service Refactor**: The model service now uses a provider-first three-column configuration flow that separates provider instances, model capabilities, and routing, with support for vision, image generation, and reasoning capability flags
+
+### 问题修复 / Fixes
+
+- 🧪 **CLI 版本号同步**：独立 CLI 的 `--version` 与 npm package 版本同步到 `0.5.8-beta.1`，避免继续显示旧的 beta 版本号
+  - **CLI Version Sync**: The standalone CLI `--version` now matches the npm package version `0.5.8-beta.1` instead of reporting an older beta version
+- 🧩 **Skill 生命周期补强**：补齐项目 Skill 分发、卸载、软链接扫描和同名来源识别等高风险路径，降低导入、刷新、删除后状态漂移的风险
+  - **Skill Lifecycle Hardening**: Strengthened project Skill distribution, uninstall, symlink scan discovery, and same-name source identity paths to reduce state drift after import, refresh, or deletion
+
+### 优化 / Improvements
+
+- 🎛️ **模型配置界面收口**：供应商和模型管理拆分为更清晰的配置层级，模型能力用图标表达，模型路由保留文字标签，测试动作统一为试管图标
+  - **Model Configuration UI Refined**: Provider and model management now have clearer configuration boundaries; model capabilities use icons, model routes keep textual chips, and test actions use a unified test-tube icon
+- 📁 **项目 Skill 列表紧凑化**：项目 Skill 结果区从大卡片宫格改为紧凑列表，减少空白和按钮噪音，次要操作改为 icon-only
+  - **Project Skill List Compact View**: The Project Skill result area has been changed from large grid cards to a compact list, reducing whitespace and button noise while moving secondary actions to icon-only controls
+
 ## [0.5.7] - 2026-05-29
 
 ### 新功能 / Features
