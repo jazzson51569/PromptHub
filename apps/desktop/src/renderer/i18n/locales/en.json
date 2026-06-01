@@ -1524,6 +1524,8 @@
     "confirmUninstallMessage": "Are you sure you want to uninstall this skill from {{platform}}?",
     "platformUninstallHint": "This removes the skill folder from the selected platform. Copy installs remove the platform copy; symlink installs remove only the link.",
     "installSuccess": "Operation successful",
+    "installToPlatformSuccess": "{{skill}} installed to {{platform}} successfully",
+    "installToPlatformsSuccess": "{{skill}} installed to {{count}} platforms successfully: {{platforms}}",
     "installPartialFailure": "Some platforms could not be installed\n{{details}}",
     "installFallbackWarning": "Symlink was not available for some platforms. PromptHub used copy install instead.\n{{details}}",
     "installFailureRow": "{{platform}}: {{reason}}",

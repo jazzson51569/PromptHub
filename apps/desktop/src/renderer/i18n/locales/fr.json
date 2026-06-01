@@ -1513,6 +1513,8 @@
     "confirmUninstallMessage": "Voulez-vous vraiment désinstaller cette compétence de {{platform}} ?",
     "platformUninstallHint": "Supprime le dossier de skill de la plateforme sélectionnée. Une installation par copie supprime la copie de la plateforme ; une installation par lien symbolique supprime seulement le lien.",
     "installSuccess": "Opération réussie",
+    "installToPlatformSuccess": "{{skill}} installé sur {{platform}}",
+    "installToPlatformsSuccess": "{{skill}} installé sur {{count}} plateformes : {{platforms}}",
     "installPartialFailure": "Certaines plateformes n'ont pas pu être installées\n{{details}}",
     "installFallbackWarning": "Le lien symbolique n'était pas disponible pour certaines plateformes. PromptHub a utilisé une installation par copie à la place.\n{{details}}",
     "installFailureRow": "{{platform}} : {{reason}}",

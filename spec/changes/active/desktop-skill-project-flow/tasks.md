@@ -17,3 +17,6 @@
 - [x] 将项目 Skill 结果区从大卡片宫格收口为紧凑列表，并把次要动作改为 icon-only
 - [x] 修复 Cherry Studio 平台识别：macOS 默认路径从 `CherryStudioDev` 改为正式版 `CherryStudio`，并接入真实平台图标
 - [x] 修复 Cherry Studio 安装适配：优先使用当前版本 `Data/agents.db` 与 `skills` / `agent_skills` / `agents` 表，保留旧 `cherrystudio.sqlite` 兼容
+- [x] 修复从 Agent/平台目录导入到我的 Skill 后，全局分发面板仍显示对应平台未安装的问题
+- [x] 优化全局平台安装成功提示，显示具体 Skill 名和目标平台名
+- [x] 完善 Skill 来源标签：区分本地文件夹导入、项目导入、商店/Git 导入和具体 Agent 平台导入

@@ -1513,6 +1513,8 @@
     "confirmUninstallMessage": "{{platform}} からこのスキルをアンインストールしてもよろしいですか？",
     "platformUninstallHint": "選択したプラットフォームの skill フォルダを削除します。コピーインストールはプラットフォーム側のコピーを削除し、シンボリックリンクはリンクだけを削除します。",
     "installSuccess": "操作が完了しました",
+    "installToPlatformSuccess": "{{skill}} を {{platform}} にインストールしました",
+    "installToPlatformsSuccess": "{{skill}} を {{count}} 個のプラットフォームにインストールしました: {{platforms}}",
     "installPartialFailure": "一部のプラットフォームでインストールに失敗しました\n{{details}}",
     "installFallbackWarning": "一部のプラットフォームではシンボリックリンクを利用できなかったため、PromptHub はコピーインストールに切り替えました。\n{{details}}",
     "installFailureRow": "{{platform}}: {{reason}}",

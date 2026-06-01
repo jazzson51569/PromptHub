@@ -55,6 +55,17 @@
   - 当前版本 Cherry Studio 的数据库位于 `Data/agents.db`，且表名为 `skills`、`agent_skills`、`agents`
   - 适配层现在优先打开 `Data/agents.db` 并检测新表结构；如果不存在，则回退旧版 `cherrystudio.sqlite` 与 `agent_global_skill` / `agent_skill` / `agent` 表
   - 安装、卸载、安装状态检测和已启用 Agent 软链接清理都通过同一 schema 检测结果选择表名
+- 修复从 Agent/平台目录导入到我的 Skill 后的全局分发状态：
+  - `getSkillMdInstallStatusForSkill(...)` 与 `getSkillMdInstallStatusDetailsForSkill(...)` 仍优先使用 PromptHub 主动分发时写入的 activation 记录保护同名变体
+  - 当 activation 记录不存在时，如果 `source_url` 或 `local_repo_path` 指向某个平台 skills 目录下的直接 skill 文件夹，则把该平台的真实目录/DB 状态作为已安装证据
+  - 这让从 Cherry Studio Agent Skills 导入的 `skill-creator` 在我的 Skill 详情页中也能显示 Cherry Studio 已安装，而不是误显示未安装
+- 优化全局平台安装成功 toast：单平台成功时显示“Skill 名 + 平台名”，多平台成功时显示成功平台列表，不再只显示 `1/1` 这类缺少上下文的计数。
+- 完善我的 Skill 来源标签：
+  - 新增 Agent 平台来源识别 helper，优先从 `source_label` 匹配平台名，也能从已有 `source_url` / `local_repo_path` 中的内置平台 skills 目录回推来源
+  - 从 Agent Skill 页导入到我的 Skill 时写入平台名作为 `source_label`，后续卡片、列表和详情来源不再只能落为“本地导入”
+  - Agent 平台来源优先于项目目录判断，但只匹配全局平台根目录；例如 `/Users/name/.claude/skills/x` 显示 `Claude Code Import`，而 `/Users/name/project/.claude/skills/x` 仍显示“项目导入”
+  - 普通扫描路径或拖入目录仍显示“本地导入”
+  - 对 Cherry Studio 这类路径，卡片来源显示为 `Cherry Studio Import`，详情来源显示为 `Imported from Cherry Studio Agent Skills`
 
 ## Verification
 
@@ -102,6 +113,18 @@
 - Cherry Studio 路径与图标修复后重新运行：
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/cherry-studio-skill-platform.test.ts tests/unit/main/skill-installer-utils.test.ts tests/unit/components/platform-icon.test.tsx`
   - 结果：通过（66/66）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `git diff --check`
+  - 结果：通过
+- Agent 导入状态与安装成功 toast 修复后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/skill-installer-platform.test.ts`
+  - 结果：通过（16/16）
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-detail-project-distribution.test.tsx`
+  - 结果：通过（16/16）
+- 来源标签完善后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-view-tags.test.tsx tests/unit/components/skill-detail-utils.test.ts`
+  - 结果：通过（24/24；覆盖全局 Claude Code Agent 目录不再误判为项目导入，保留既有 SkillListView act warning）
 - `pnpm --filter @prompthub/desktop typecheck`
   - 结果：通过
 - `git diff --check`

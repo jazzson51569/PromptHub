@@ -1512,6 +1512,8 @@
     "confirmUninstallMessage": "¿Seguro que quieres desinstalar esta habilidad de {{platform}}?",
     "platformUninstallHint": "Elimina la carpeta de la habilidad de la plataforma seleccionada. Las instalaciones por copia eliminan la copia de la plataforma; las instalaciones por enlace simbólico solo eliminan el enlace.",
     "installSuccess": "Operación completada",
+    "installToPlatformSuccess": "{{skill}} instalado en {{platform}}",
+    "installToPlatformsSuccess": "{{skill}} instalado en {{count}} plataformas: {{platforms}}",
     "installPartialFailure": "Algunas plataformas no pudieron instalarse\n{{details}}",
     "installFallbackWarning": "Algunas plataformas no admitieron enlaces simbólicos. PromptHub usó instalación por copia en su lugar.\n{{details}}",
     "installFailureRow": "{{platform}}: {{reason}}",

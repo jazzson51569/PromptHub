@@ -1524,6 +1524,8 @@
     "confirmUninstallMessage": "确定要从 {{platform}} 卸载此 Skill 吗？",
     "platformUninstallHint": "这会从所选平台移除对应的 skill 文件夹。复制安装会删除平台副本；软链接安装只会删除链接本身。",
     "installSuccess": "操作成功",
+    "installToPlatformSuccess": "已将 {{skill}} 安装到 {{platform}}",
+    "installToPlatformsSuccess": "已将 {{skill}} 安装到 {{count}} 个平台：{{platforms}}",
     "installPartialFailure": "部分平台安装失败\n{{details}}",
     "installFallbackWarning": "部分平台无法创建符号链接，PromptHub 已自动改用复制安装。\n{{details}}",
     "installFailureRow": "{{platform}}：{{reason}}",
