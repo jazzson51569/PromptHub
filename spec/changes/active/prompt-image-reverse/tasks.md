@@ -1,0 +1,17 @@
+- [x] 增加独立 `ImagePromptReverseModal`
+- [x] 从顶部 Prompt 新建菜单增加独立图片反推入口
+- [x] Quick Add 移除图片反推模式，只保留分析和生成
+- [x] 增加图片选择 / 拖拽 / 粘贴截图输入
+- [x] 增加图片反推 Prompt 的 AI contract 与解析测试
+- [x] 增加 `imageReverse` chat 场景模型选择
+- [x] 增加“同时添加为参考图”勾选项
+- [x] 记住“同时添加为参考图”偏好
+- [x] 勾选时创建 image Prompt 保存参考图到 `images`，取消勾选时不写入
+- [x] 优化固定 Prompt 类型 UI，避免与文件夹选择拥挤
+- [x] 增加 chat 模型 `vision` 能力标记
+- [x] 图片反推只路由到 vision-capable chat 模型，不再使用普通文本模型或旧版单模型兜底
+- [x] 未配置视觉模型时显示图片反推专用错误提示，并阻止 AI 调用 / Prompt 创建
+- [x] AI 设置工作台按主文本 / 生图 / 快速 / 视觉四类展示状态
+- [x] 修正模型能力与模型路由边界：只保留 `vision` 为模型能力，`fast` 改为 `fastText` 路由槽位
+- [x] 设置页从业务场景默认模型改为主文本 / 快速 / 视觉 / 生图四类模型路由
+- [x] 跑定向 unit / component / eslint / locale JSON 校验，并记录当前 typecheck 外部失败

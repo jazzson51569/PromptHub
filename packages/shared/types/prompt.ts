@@ -72,7 +72,7 @@ export interface CreatePromptDTO {
   userPromptEn?: string;
   variables?: Variable[];
   tags?: string[];
-  folderId?: string;
+  folderId?: string | null;
   images?: string[];
   videos?: string[];
   source?: string;
@@ -90,7 +90,7 @@ export interface UpdatePromptDTO {
   userPromptEn?: string;
   variables?: Variable[];
   tags?: string[];
-  folderId?: string;
+  folderId?: string | null;
   images?: string[];
   videos?: string[];
   isFavorite?: boolean;

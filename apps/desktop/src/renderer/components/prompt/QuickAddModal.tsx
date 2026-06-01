@@ -54,6 +54,7 @@ export function QuickAddModal({
   const scenarioModelDefaults = useSettingsStore(
     (state) => state.scenarioModelDefaults,
   );
+  const modelRouteDefaults = useSettingsStore((state) => state.modelRouteDefaults);
   const aiProvider = useSettingsStore((state) => state.aiProvider);
   const aiApiProtocol = useSettingsStore((state) => state.aiApiProtocol);
   const aiApiKey = useSettingsStore((state) => state.aiApiKey);
@@ -79,6 +80,7 @@ export function QuickAddModal({
       resolveQuickAddAnalysisConfig({
         aiModels,
         scenarioModelDefaults,
+        modelRouteDefaults,
         aiProvider,
         aiApiProtocol,
         aiApiKey,
@@ -92,6 +94,7 @@ export function QuickAddModal({
       aiModel,
       aiModels,
       aiProvider,
+      modelRouteDefaults,
       scenarioModelDefaults,
     ],
   );
@@ -124,7 +127,7 @@ export function QuickAddModal({
 
   // Handle create
   const handleCreate = async () => {
-    if (!promptText.trim() || isSubmitting) return;
+    if (isSubmitting) return;
 
     if (!analysisConfig) {
       showToast(t("quickAdd.noAiConfigDesc"), "error");
@@ -154,6 +157,11 @@ export function QuickAddModal({
 
       return matchedFolder?.id;
     };
+
+    if (!promptText.trim()) {
+      setIsSubmitting(false);
+      return;
+    }
 
     if (mode === "generate") {
       try {
@@ -320,8 +328,8 @@ export function QuickAddModal({
           <div className="space-y-2.5">
             <label className="text-sm font-medium text-muted-foreground">
               {mode === "generate"
-                ? t("quickAdd.generatePromptRequest") || "描述你想要的 Prompt"
-                : t("quickAdd.pastePrompt") || "粘贴你的 Prompt"}
+                  ? t("quickAdd.generatePromptRequest") || "描述你想要的 Prompt"
+                  : t("quickAdd.pastePrompt") || "粘贴你的 Prompt"}
               <span className="ml-1 text-destructive">*</span>
             </label>
             <textarea
@@ -330,14 +338,14 @@ export function QuickAddModal({
               onChange={(e) => setPromptText(e.target.value)}
               aria-label={
                 mode === "generate"
-                  ? t("quickAdd.generatePromptRequest") || "描述你想要的 Prompt"
-                  : t("quickAdd.pastePrompt") || "粘贴你的 Prompt"
+                    ? t("quickAdd.generatePromptRequest") || "描述你想要的 Prompt"
+                    : t("quickAdd.pastePrompt") || "粘贴你的 Prompt"
               }
               placeholder={
                 mode === "generate"
-                  ? t("quickAdd.generatePlaceholder") ||
-                    "例如：帮我生成一个用于写小红书标题的 Prompt，语气年轻、有网感，输出 10 个备选标题。"
-                  : t("quickAdd.placeholder") || "在这里粘贴你的 Prompt 内容..."
+                    ? t("quickAdd.generatePlaceholder") ||
+                      "例如：帮我生成一个用于写小红书标题的 Prompt，语气年轻、有网感，输出 10 个备选标题。"
+                    : t("quickAdd.placeholder") || "在这里粘贴你的 Prompt 内容..."
               }
               className="w-full min-h-[220px] px-4 py-3 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground resize-y focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm leading-relaxed"
             />
@@ -362,13 +370,15 @@ export function QuickAddModal({
                     <button
                       key={type}
                       type="button"
-                      onClick={() => setSelectedPromptType(type)}
+                      onClick={() => {
+                        setSelectedPromptType(type);
+                      }}
                       aria-pressed={isActive}
                       className={`flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-sm ${
                         isActive
                           ? "border-primary/30 bg-primary/10 text-primary"
                           : "border-border bg-muted/20 text-muted-foreground hover:bg-muted/40"
-                      }`}
+                      } disabled:cursor-not-allowed disabled:opacity-50`}
                     >
                       {type === "text" ? (
                         <SparklesIcon className="w-4 h-4 shrink-0" />
@@ -432,13 +442,13 @@ export function QuickAddModal({
           </button>
           <button
             onClick={handleCreate}
-            disabled={!promptText.trim() || isSubmitting}
+            disabled={isSubmitting || !promptText.trim()}
             className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-white font-medium hover:bg-primary/90 transition-all disabled:opacity-50 active:scale-press-in shadow-lg shadow-primary/20"
           >
             {isSubmitting && <Loader2Icon className="w-4 h-4 animate-spin" />}
             {mode === "generate"
-              ? t("quickAdd.generateAndCreate") || "生成并创建"
-              : t("quickAdd.create") || "立即创建"}
+                ? t("quickAdd.generateAndCreate") || "生成并创建"
+                : t("quickAdd.create") || "立即创建"}
           </button>
         </div>
       </div>

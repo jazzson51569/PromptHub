@@ -4,12 +4,14 @@ import {
 } from "../../services/ai-defaults";
 import type {
   AIModelConfig,
+  ModelRouteDefaults,
   ScenarioModelDefaults,
 } from "../../stores/settings.store";
 
 interface ResolveQuickAddAnalysisConfigOptions {
   aiModels: AIModelConfig[];
   scenarioModelDefaults: ScenarioModelDefaults;
+  modelRouteDefaults?: ModelRouteDefaults;
   aiProvider: string;
   aiApiProtocol: AIConfig["apiProtocol"];
   aiApiKey: string;
@@ -20,6 +22,7 @@ interface ResolveQuickAddAnalysisConfigOptions {
 export function resolveQuickAddAnalysisConfig({
   aiModels,
   scenarioModelDefaults,
+  modelRouteDefaults,
   aiProvider,
   aiApiProtocol,
   aiApiKey,
@@ -29,6 +32,7 @@ export function resolveQuickAddAnalysisConfig({
   return resolveScenarioAIConfig({
     aiModels,
     scenarioModelDefaults,
+    modelRouteDefaults,
     scenario: "quickAdd",
     type: "chat",
     aiProvider,
@@ -140,7 +144,7 @@ export function buildQuickAddAnalysisPrompt(
   promptText: string,
   context: QuickAddPromptContext,
 ): string {
-  return `请分析以下用户提供的 Prompt，并返回 JSON 格式的结果：
+  return `你是一名资深 PromptHub 内容整理专家。请分析用户提供的 Prompt，把它整理成可保存、可检索、可复用的结构化元数据，并只返回 JSON。
 
 用户 Prompt:
 """
@@ -153,14 +157,20 @@ ${context.folderNames || "暂无文件夹"}
 已知存在的标签（请优先从这些标签中提取或匹配）：
 ${context.tagsString}
 
-请分析并返回以下 JSON 格式（不要包含任何其他文字，只返回纯 JSON）：
+请只返回以下 JSON 结构，不要输出 Markdown、解释或代码块：
 {
-  "title": "为这个 Prompt 起一个简洁的标题（不超过20字）",
-  "systemPrompt": "如果 Prompt 中包含系统提示词/角色设定，提取出来；如果没有，根据 Prompt 内容生成一个合适的系统提示词",
-  "description": "用一句话描述这个 Prompt 的用途（不超过50字）",
+  "title": "具体、可识别的标题，不超过20字，不要使用“新 Prompt”等泛名",
+  "systemPrompt": "如果原文包含角色设定/系统约束，提取并整理；如果没有明确系统提示词，返回空字符串",
+  "description": "一句话说明用途，不超过50字",
   "suggestedFolder": "根据内容推荐最适合的文件夹名称，如果没有合适的则返回 null",
-  "tags": ["根据内容提取关键词作为标签，优先使用已存在的标签，如果必要可以生成1-2个新标签"]
-}`;
+  "tags": ["2-5 个标签，优先使用已存在标签，必要时只新增高信号标签"]
+}
+
+质量要求：
+- 保留原 Prompt 的任务目标、变量占位符、格式约束、代码块和输出结构。
+- 不要把用户 Prompt 改写成另一个任务。
+- title / description / tags 要便于用户之后搜索和筛选。
+- systemPrompt 只能承载角色、行为原则、长期约束；不要把具体用户任务塞进去。`;
 }
 
 export function buildQuickAddGeneratePrompt(
@@ -171,7 +181,7 @@ export function buildQuickAddGeneratePrompt(
   const preferredTypeLabel =
     preferredPromptType === "image" ? "image（绘图）" : "text（文本）";
 
-  return `你是一名资深 Prompt 设计师。请根据用户需求，生成一份可直接保存到 PromptHub 的 Prompt 草稿，并只返回 JSON。
+  return `你是一名资深 Prompt 设计师。请根据用户需求，生成一份可以直接保存、测试和复用的 PromptHub 草稿，并只返回 JSON。
 
 用户需求：
 """
@@ -189,10 +199,10 @@ ${context.tagsString}
 
 请只返回以下 JSON 结构，不要输出 Markdown、解释或代码块：
 {
-  "title": "简洁标题，不超过20字",
+  "title": "具体、可识别的标题，不超过20字，不要使用“通用助手”等泛名",
   "promptType": "text 或 image",
-  "systemPrompt": "系统提示词；如果是 image Prompt 且不需要，可以返回空字符串",
-  "userPrompt": "最终给模型使用的 Prompt 正文，必须完整可用",
+  "systemPrompt": "系统提示词；仅写角色、边界、质量标准和长期行为约束；如果不需要，返回空字符串",
+  "userPrompt": "最终给模型使用的 Prompt 正文，必须完整、结构化、可直接执行",
   "description": "一句话描述用途，不超过50字",
   "suggestedFolder": "推荐的文件夹名称，如果没有合适的则返回 null",
   "tags": ["2-5 个标签，优先使用已存在标签"]
@@ -201,8 +211,10 @@ ${context.tagsString}
 生成要求：
 - 必须输出可以直接保存和测试的 Prompt，不要只输出大纲。
 - 如果用户需求更像绘图 / 生图任务，返回 promptType=image；否则返回 text。
-- text Prompt 可以包含 systemPrompt 和 userPrompt。
-- image Prompt 的重点应放在 userPrompt，systemPrompt 可以为空。
+- text Prompt 应包含清晰的角色/任务/输入/步骤/输出格式/质量标准。
+- image Prompt 的 userPrompt 应覆盖主体、场景、构图、镜头/视角、光线、色彩、材质、风格、质量词和必要的 avoid/negative 约束。
+- 保留用户要求的变量占位符，例如 {{topic}}、{{audience}}。
+- 不要编造用户未要求的工具、品牌、人物身份、版权实体或不可验证背景。
 - 如果用户没有明确指定类型，优先参考当前偏好 Prompt 类型：${preferredTypeLabel}。`;
 }
 

@@ -99,6 +99,7 @@ export function AiTestModal({
   const aiModel = useSettingsStore((state) => state.aiModel);
   const aiModels = useSettingsStore((state) => state.aiModels);
   const scenarioModelDefaults = useSettingsStore((state) => state.scenarioModelDefaults);
+  const modelRouteDefaults = useSettingsStore((state) => state.modelRouteDefaults);
 
   const preferEnglish = useMemo(() => {
     const lang = (i18n.language || '').toLowerCase();
@@ -108,14 +109,28 @@ export function AiTestModal({
   }, [i18n.language]);
 
   const defaultChatModel = useMemo(() => {
-    return resolveScenarioModel(aiModels, scenarioModelDefaults, 'promptTest', 'chat');
-  }, [aiModels, scenarioModelDefaults]);
+    return resolveScenarioModel(
+      aiModels,
+      scenarioModelDefaults,
+      'promptTest',
+      'chat',
+      undefined,
+      modelRouteDefaults,
+    );
+  }, [aiModels, modelRouteDefaults, scenarioModelDefaults]);
 
   // Get default image generation model
   // 获取默认生图模型
   const defaultImageModel = useMemo(() => {
-    return resolveScenarioModel(aiModels, scenarioModelDefaults, 'imageTest', 'image');
-  }, [aiModels, scenarioModelDefaults]);
+    return resolveScenarioModel(
+      aiModels,
+      scenarioModelDefaults,
+      'imageTest',
+      'image',
+      undefined,
+      modelRouteDefaults,
+    );
+  }, [aiModels, modelRouteDefaults, scenarioModelDefaults]);
 
   // Get all image generation models
   // 获取所有生图模型

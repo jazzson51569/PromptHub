@@ -50,11 +50,19 @@ export function PromptQuickRewriteDialog({
   const scenarioModelDefaults = useSettingsStore(
     (state) => state.scenarioModelDefaults,
   );
+  const modelRouteDefaults = useSettingsStore((state) => state.modelRouteDefaults);
 
   const rewriteModel = useMemo(
     () =>
-      resolveScenarioModel(aiModels, scenarioModelDefaults, "translation", "chat"),
-    [aiModels, scenarioModelDefaults],
+      resolveScenarioModel(
+        aiModels,
+        scenarioModelDefaults,
+        "translation",
+        "chat",
+        undefined,
+        modelRouteDefaults,
+      ),
+    [aiModels, modelRouteDefaults, scenarioModelDefaults],
   );
 
   const [rewriteInstruction, setRewriteInstruction] = useState("");

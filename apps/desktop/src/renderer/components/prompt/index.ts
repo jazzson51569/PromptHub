@@ -1,4 +1,5 @@
 export { CreatePromptModal } from './CreatePromptModal';
+export { ImagePromptReverseModal } from './ImagePromptReverseModal';
 export { PromptEditor } from './PromptEditor';
 export { EditPromptModal } from './EditPromptModal';
 export { VersionHistoryModal } from './VersionHistoryModal';

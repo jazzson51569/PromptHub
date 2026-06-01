@@ -114,14 +114,17 @@ export function EditPromptModal({
   const addSourceHistory = useSettingsStore((state) => state.addSourceHistory);
   const aiModels = useSettingsStore((state) => state.aiModels);
   const scenarioModelDefaults = useSettingsStore((state) => state.scenarioModelDefaults);
+  const modelRouteDefaults = useSettingsStore((state) => state.modelRouteDefaults);
   const translationModel = useMemo(() => {
     return resolveScenarioModel(
       aiModels,
       scenarioModelDefaults,
       "translation",
       "chat",
+      undefined,
+      modelRouteDefaults,
     );
-  }, [aiModels, scenarioModelDefaults]);
+  }, [aiModels, modelRouteDefaults, scenarioModelDefaults]);
   const canTranslate = !!translationModel;
   const rewriteModel = translationModel;
   const canRewrite = !!rewriteModel;

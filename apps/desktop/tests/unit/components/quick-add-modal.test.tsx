@@ -10,8 +10,19 @@ import { useSettingsStore } from "../../../src/renderer/stores/settings.store";
 import { renderWithI18n } from "../../helpers/i18n";
 import { installWindowMocks } from "../../helpers/window";
 
+const chatCompletionMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../../src/renderer/services/ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../src/renderer/services/ai")>();
+  return {
+    ...actual,
+    chatCompletion: (...args: unknown[]) => chatCompletionMock(...args),
+  };
+});
+
 describe("QuickAddModal", () => {
   beforeEach(() => {
+    chatCompletionMock.mockReset();
     installWindowMocks();
 
     useFolderStore.setState({
@@ -88,5 +99,6 @@ describe("QuickAddModal", () => {
     expect(screen.getByRole("button", { name: "绘图" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /AI 智能自动分类/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "生成并创建" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "图片反推" })).not.toBeInTheDocument();
   });
 });

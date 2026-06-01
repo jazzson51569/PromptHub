@@ -114,7 +114,7 @@ describe("quick-add-utils", () => {
     );
   });
 
-  it("prefers the explicit quick add scenario model over the generic default", () => {
+  it("prefers the fast model route over the legacy quick add scenario model", () => {
     const config = resolveQuickAddAnalysisConfig({
       aiModels: [
         {
@@ -136,7 +136,10 @@ describe("quick-add-utils", () => {
         },
       ],
       scenarioModelDefaults: {
-        quickAdd: "chat-b",
+        quickAdd: "chat-a",
+      },
+      modelRouteDefaults: {
+        fastText: "chat-b",
       },
       aiProvider: "",
       aiApiKey: "",
@@ -165,6 +168,8 @@ describe("quick-add-utils", () => {
     expect(prompt).toContain("Writing, Marketing");
     expect(prompt).toContain("text（文本）");
     expect(prompt).toContain('"userPrompt"');
+    expect(prompt).toContain("输出格式");
+    expect(prompt).toContain("保留用户要求的变量占位符");
   });
 
   it("parses AI quick-add analysis results from JSON content", () => {
