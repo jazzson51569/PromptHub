@@ -19,7 +19,8 @@
 - [x] Fix installed custom Gitea safety scans so internal source provenance does not block managed local package scanning.
 - [x] Add safety scan regression tests for installed managed packages with internal Gitea source URLs and pre-install blocked source behavior.
 - [x] Add custom Git/Gitea refresh regression tests for user-selected repositories whose hostnames resolve to private network addresses.
-- [x] Add Skill store card regression tests for install pending animation across recommended and already-imported sections.
+- [x] Add installed Skill update white-box regression matrix for private Git/Gitea content URLs while keeping arbitrary internal URLs blocked.
+- [x] Add Skill store regression tests for install pending animation across recommended, already-imported, detail, and concurrent install states.
 - [x] Audit safety scan prompt construction for full-package content coverage.
 - [x] Add prompt-sensitive tests proving ordinary docs/reference files are sent to AI, not only `SKILL.md` and scripts.
 - [x] Add tests proving repository preflight findings are passed to AI as review evidence.

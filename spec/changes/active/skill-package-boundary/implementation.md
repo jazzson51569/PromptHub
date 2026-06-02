@@ -47,9 +47,17 @@ Read:
   - User-selected private Git/Gitea repository scans now preserve and allow `http://192.168.x.x[:port]/owner/repo` style URLs while public HTTP URLs remain blocked.
   - Git clone and remote branch listing share the same private-network HTTP boundary, so refresh, branch selection, and install do not disagree.
   - `localhost` hostnames remain blocked even when private-network access or private HTTP is explicitly requested.
+- Fixed installed Skill update/check-update for private/self-hosted sources:
+  - `skill:fetchRemoteContent` and byte fetches now consult installed Skill `source_url` / `content_url` records before opting into private network access.
+  - Exact installed `content_url` matches and URLs within an installed `source_url` path scope may use private-network fetching, including private HTTP.
+  - Arbitrary internal URLs outside installed Skill source scope still use the default SSRF policy and remain blocked.
 - Fixed Skill store install pending feedback:
   - Store cards now match pending install state by `source_id`, then `source_url`, then `slug`, so Claude Code / OpenAI Codex entries without a stable source id still show the spinner.
   - Pending install state now takes precedence over the installed check badge, and the installed section also receives the pending key, so cards do not jump straight to a green check while install is still in progress.
+  - Store install pending state now tracks a map of source keys instead of a single source id, so concurrent quick installs keep independent spinners until each async install finishes.
+  - Store detail reads the same pending state as store cards, so opening a skill while it is installing shows the installing state and blocks duplicate install clicks.
+  - Store detail no longer closes from backdrop clicks; users must use the explicit close action, so an expanded detail view does not collapse from accidental outside clicks.
+  - Store detail footer actions now use one button system for check update, update, remove, imported status, and install states while preserving semantic colors.
 
 ## Verification
 
@@ -86,9 +94,18 @@ Read:
 - Private Gitea refresh regression:
   - `pnpm --filter @prompthub/desktop test:run tests/unit/main/skill-installer-remote.test.ts tests/unit/main/skill-installer.test.ts tests/unit/main/skill-installer-utils.test.ts`
   - Passed: 3 files, 240 tests.
+- Installed private Gitea update regression:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/main/skill-installer.test.ts`
+  - Passed: 1 file, 165 tests.
+- Installed private Gitea update white-box matrix:
+  - `pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-code-highlight.test.ts tests/unit/components/skill-file-editor.test.tsx tests/unit/components/skill-file-icons.test.ts tests/unit/main/skill-installer.test.ts`
+  - Passed: 4 files, 177 tests.
 - Store install pending UI regression:
   - `pnpm --filter @prompthub/desktop test:run tests/unit/components/skill-store-card.test.tsx tests/unit/components/skill-store-remote.test.tsx`
-  - Passed: 2 files, 38 tests.
+  - Passed: 2 files, 42 tests.
+- Store install pending concurrency/detail regression:
+  - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-store-card.test.tsx tests/unit/components/skill-store-remote.test.tsx --testNamePattern "quick-install spinner|shared install pending|SkillStoreCard"`
+  - Passed: 2 files, 16 tests.
 - Type check:
   - `pnpm --filter @prompthub/desktop typecheck`
   - Passed.
@@ -109,6 +126,8 @@ Regression coverage added:
   - Store detail safety scan now uses the installed Skill content and `local_repo_path` when the store entry is already imported, so nested package files participate in the AI scan.
 - Added safety scan regressions for installed internal-Gitea packages and for store detail passing the managed package path.
 - Added private Gitea refresh regressions proving default remote fetches still block private network addresses while non-GitHub repository scans explicitly allow them, including direct `http://192.168.x.x:port/...` repositories.
+- Added installed private Gitea update regressions proving installed `content_url` fetches opt into private network access while same-network unrelated URLs do not.
+- Expanded installed private Gitea update white-box coverage for exact `content_url`, `source_url` path-scope matching with trailing slashes, byte fetches, same-origin sibling path rejection, different-origin/port rejection, and DB lookup failure fallback to default SSRF policy.
 - Added Skill store card regressions proving quick-install pending state shows a spinner for source-id and source-url identities and remains visible even if the card is already classified as installed.
 - Added prompt-sensitive safety scan coverage for ordinary package docs/reference files, repository preflight evidence, prompt budget/truncation behavior, and real filesystem symlink escape filtering.
 - Added store batch scan coverage for preserving `local_repo_path` when scanning installed managed packages.
