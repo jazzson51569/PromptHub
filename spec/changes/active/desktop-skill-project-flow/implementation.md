@@ -66,6 +66,23 @@
   - Agent 平台来源优先于项目目录判断，但只匹配全局平台根目录；例如 `/Users/name/.claude/skills/x` 显示 `Claude Code Import`，而 `/Users/name/project/.claude/skills/x` 仍显示“项目导入”
   - 普通扫描路径或拖入目录仍显示“本地导入”
   - 对 Cherry Studio 这类路径，卡片来源显示为 `Cherry Studio Import`，详情来源显示为 `Imported from Cherry Studio Agent Skills`
+- 修复 Cherry Studio 平台扫描页卸载：
+  - 新增 Cherry Studio 专用的 `uninstallCherryStudioPlatformSkill(...)`，负责校验平台 Skill 路径、映射 folder name，并转入 DB-aware 卸载
+  - `SkillInstaller.uninstallPlatformSkill(...)` 对 Cherry Studio 只做入口分发，不再把 Cherry 的数据库语义散落在通用平台卸载逻辑中
+  - Cherry Studio 适配器会同步删除 `Data/agents.db` 中的 `skills` 与 `agent_skills` 记录，并继续清理 copied skill 文件夹和已启用 Agent 的软链接
+  - 如果 Cherry Studio 数据库中的 skill 行带有 `builtin` 或 `is_builtin` 标记，则拒绝卸载，避免误删内置 Skill
+  - Cherry Studio 不再强制把 symlink 请求降级成 copy：软连接分发现在会写入 Cherry 自身数据库注册记录，并把 `Data/Skills/<folder>` 建成指向 PromptHub 源目录的目录 symlink；普通安装仍保持 copy
+  - Cherry Studio 安装状态详情会检查全局 Skill 文件夹本身是否为 symlink，避免 UI 把软连接安装误报为 copy
+  - 软连接分发 CRUD 已补齐：创建会写 DB 并创建目录 symlink；读取会返回 installed + mode；重复安装会复用原 DB row 并更新 hash/目标；copy 与 symlink 可以互相切换；卸载会删除 DB row 和 Cherry 侧链接/目录，不删除 PromptHub 源目录；symlink 权限失败时回退为 DB-backed copy 安装
+- 修复商店详情“从我的 Skill 中移除”按钮无效的问题：
+  - `uninstallRegistrySkill(...)` 不再只按 `source_id` 精确查找本地 skill，而是先用 `source_id` / `slug` / `source_url` / `content_url` 找到对应 store 条目，再复用 `findInstalledRegistrySkill(...)` 的已导入口径匹配本地 skill
+  - `installFromRegistry(...)` 与 `updateRegistrySkill(...)` 也复用同一 key resolver，避免同类无 `source_id` store 条目在导入、更新、移除三个动作上口径不一致
+  - 新增组件回归测试，直接点击 `Remove from My Skills`，覆盖“详情显示已导入，但本地 skill 只按 `registry_slug` 关联”的场景
+- 修复项目 Skill 工作区只能添加项目、无法删除项目的问题：
+  - 项目详情头部在编辑按钮旁新增删除项目按钮，使用破坏性二次确认
+  - 确认文案明确只会移除 PromptHub 项目工作区记录，不会删除用户磁盘上的项目目录或文件
+  - 删除当前项目后自动选择下一个项目；没有剩余项目时回到空状态
+  - 新增组件回归测试，覆盖确认删除、调用 `removeSkillProject(projectId)`、切换到下一个项目和成功 toast
 
 ## Verification
 
@@ -125,6 +142,36 @@
 - 来源标签完善后重新运行：
 - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-view-tags.test.tsx tests/unit/components/skill-detail-utils.test.ts`
   - 结果：通过（24/24；覆盖全局 Claude Code Agent 目录不再误判为项目导入，保留既有 SkillListView act warning）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `git diff --check`
+  - 结果：通过
+- Cherry Studio 平台扫描页卸载与内置 Skill 保护修复后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/cherry-studio-skill-platform.test.ts tests/unit/main/skill-installer.test.ts`
+  - 结果：通过（164/164）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `git diff --check`
+  - 结果：通过
+- Cherry Studio DB-backed symlink 分发修复后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/cherry-studio-skill-platform.test.ts tests/unit/main/skill-installer-platform.test.ts`
+  - 结果：通过（30/30）
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/cherry-studio-skill-platform.test.ts tests/unit/main/skill-installer-platform.test.ts tests/unit/main/skill-installer.test.ts`
+  - 结果：通过（188/188）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `git diff --check`
+  - 结果：通过
+- 商店详情移除按钮修复后重新运行：
+- `pnpm --filter @prompthub/desktop test -- tests/unit/stores/skill.store.test.ts tests/unit/components/skill-store-remote.test.tsx --run`
+  - 结果：通过（68/68）
+- `pnpm --filter @prompthub/desktop typecheck`
+  - 结果：通过
+- `git diff --check`
+  - 结果：通过
+- 项目 Skill 删除项目入口修复后重新运行：
+- `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx`
+  - 结果：通过（18/18）
 - `pnpm --filter @prompthub/desktop typecheck`
   - 结果：通过
 - `git diff --check`

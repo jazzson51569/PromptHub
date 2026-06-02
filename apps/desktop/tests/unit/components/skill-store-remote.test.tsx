@@ -1420,6 +1420,78 @@ describe("SkillStore remote loading", () => {
     expect(queryByText("Installed stale content")).not.toBeInTheDocument();
   });
 
+  it("removes an imported store skill from the detail action when it was matched by slug", async () => {
+    const deleteSkill = vi.fn().mockResolvedValue(true);
+    const getAll = vi.fn().mockResolvedValue([]);
+    installWindowMocks({
+      api: {
+        skill: {
+          delete: deleteSkill,
+          getAll,
+          scanSafety: vi.fn().mockResolvedValue({
+            level: "safe",
+            summary: "safe",
+            findings: [],
+            recommendedAction: "allow",
+            scannedAt: Date.now(),
+            checkedFileCount: 1,
+            scanMethod: "ai",
+          }),
+        },
+      },
+    });
+
+    const storeSkill = {
+      slug: "aspnet-core",
+      name: "ASP.NET Core",
+      description: "ASP.NET Core helper",
+      category: "development",
+      tags: ["dotnet"],
+      version: "1.0.0",
+      content: "# ASP.NET Core\n",
+      compatibility: ["claude"],
+    } as never;
+    useSkillStore.setState({
+      registrySkills: [storeSkill],
+      skills: [
+        {
+          id: "skill-aspnet-core",
+          name: "ASP.NET Core",
+          registry_slug: "aspnet-core",
+          description: "Installed ASP.NET Core helper",
+          instructions: "# ASP.NET Core\n",
+          content: "# ASP.NET Core\n",
+          protocol_type: "skill",
+          tags: ["dotnet"],
+          is_favorite: false,
+          currentVersion: 0,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+    } as never);
+
+    await renderWithI18n(
+      <SkillStoreDetail
+        skill={storeSkill}
+        isInstalled={true}
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove from My Skills" }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(deleteSkill).toHaveBeenCalledWith("skill-aspnet-core");
+    });
+    expect(getAll).toHaveBeenCalled();
+  });
+
   it("prompts for retranslation when store translation is stale", async () => {
     useSkillStore.setState({
       getTranslationState: vi.fn().mockReturnValue({

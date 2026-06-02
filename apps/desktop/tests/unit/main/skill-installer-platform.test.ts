@@ -168,7 +168,7 @@ describe("skill-installer-platform symlink install", () => {
     });
   });
 
-  it("falls back to copy semantics for Cherry Studio symlink requests because Cherry requires DB registration", async () => {
+  it("registers Cherry Studio symlink requests through its database-backed adapter", async () => {
     const result = await installSkillMdSymlink(
       "demo-skill",
       "# skill",
@@ -180,12 +180,46 @@ describe("skill-installer-platform symlink install", () => {
       expect.objectContaining({ id: "cherry-studio" }),
       "demo-skill",
       "/prompthub/skills/demo-skill",
+      { mode: "symlink" },
     );
     expect(fsMocks.symlink).not.toHaveBeenCalled();
     expect(result).toEqual({
       requestedMode: "symlink",
+      effectiveMode: "symlink",
+    });
+  });
+
+  it("falls back to Cherry Studio copy registration when DB-backed symlink creation is not permitted", async () => {
+    cherryStudioMocks.installCherryStudioSkill
+      .mockRejectedValueOnce(
+        Object.assign(new Error("operation not permitted"), { code: "EPERM" }),
+      )
+      .mockResolvedValueOnce(undefined);
+
+    const result = await installSkillMdSymlink(
+      "demo-skill",
+      "# skill",
+      "cherry-studio",
+      "/prompthub/skills/demo-skill",
+    );
+
+    expect(cherryStudioMocks.installCherryStudioSkill).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ id: "cherry-studio" }),
+      "demo-skill",
+      "/prompthub/skills/demo-skill",
+      { mode: "symlink" },
+    );
+    expect(cherryStudioMocks.installCherryStudioSkill).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ id: "cherry-studio" }),
+      "demo-skill",
+      "/prompthub/skills/demo-skill",
+    );
+    expect(result).toEqual({
+      requestedMode: "symlink",
       effectiveMode: "copy",
-      fallbackReason: "Cherry Studio requires database registration",
+      fallbackReason: "EPERM: operation not permitted",
     });
   });
 
@@ -385,6 +419,45 @@ describe("skill-installer-platform symlink install", () => {
         (entry) => entry.installed && entry.mode === "copy",
       ),
     ).toBe(true);
+  });
+
+  it("reports Cherry Studio platform installs as symlinks when the registered folder is a link", async () => {
+    const cherrySkillsDir =
+      "/Users/demo/Library/Application Support/CherryStudio/Data/Skills";
+    internalMocks.fileExists.mockImplementation(async (target: string) => {
+      return target.endsWith(".prompthub-platform-activations.json");
+    });
+    fsMocks.readFile = vi.fn(async () =>
+      JSON.stringify({
+        writer: {
+          skillId: "skill-a",
+          skillName: "writer",
+        },
+      }),
+    ) as any;
+    utilsMocks.getPlatformSkillsDir.mockImplementation((platform) =>
+      platform.id === "cherry-studio"
+        ? cherrySkillsDir
+        : `/platform/${platform.id}/skills`,
+    );
+    cherryStudioMocks.getCherryStudioSkillStatus.mockImplementation(
+      async (_platform, skillName: string) => skillName === "writer",
+    );
+    fsMocks.lstat.mockImplementation(async (target: string) => ({
+      isSymbolicLink: () => target === `${cherrySkillsDir}/writer`,
+      isDirectory: () => target !== `${cherrySkillsDir}/writer`,
+      isFile: () => false,
+    }));
+
+    const status = await getSkillMdInstallStatusDetailsForSkill(
+      { id: "skill-a", name: "writer", source_id: "source-a" },
+      ["writer"],
+    );
+
+    expect(status["cherry-studio"]).toEqual({
+      installed: true,
+      mode: "symlink",
+    });
   });
 
   it("reports an agent-imported Cherry Studio skill as installed from its source path without activation state", async () => {

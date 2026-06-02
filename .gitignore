@@ -85,6 +85,7 @@ playwright-report/
 # Cache
 # ========================
 .cache/
+.codegraph/
 .parcel-cache/
 .eslintcache
 

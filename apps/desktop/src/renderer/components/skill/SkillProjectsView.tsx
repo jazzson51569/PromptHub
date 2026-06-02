@@ -25,6 +25,7 @@ import { useSettingsStore } from "../../stores/settings.store";
 import { useSkillStore } from "../../stores/skill.store";
 import { useToast } from "../ui/Toast";
 import { Modal } from "../ui/Modal";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Input } from "../ui/Input";
 import { SkillQuickInstall } from "./SkillQuickInstall";
 import { filterVisibleScannedSkills } from "../../services/skill-filter";
@@ -395,6 +396,9 @@ export function SkillProjectsView() {
   const updateSkillProject = useSettingsStore(
     (state) => state.updateSkillProject,
   );
+  const removeSkillProject = useSettingsStore(
+    (state) => state.removeSkillProject,
+  );
 
   const [editingProject, setEditingProject] = useState<SkillProject | null>(
     null,
@@ -413,6 +417,8 @@ export function SkillProjectsView() {
   const [selectedProjectSkillPath, setSelectedProjectSkillPath] = useState<
     string | null
   >(null);
+  const [projectPendingDelete, setProjectPendingDelete] =
+    useState<SkillProject | null>(null);
   const autoScannedProjectIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -555,6 +561,26 @@ export function SkillProjectsView() {
       );
       return false;
     }
+  };
+
+  const handleConfirmDeleteProject = () => {
+    if (!projectPendingDelete) {
+      return;
+    }
+
+    const currentIndex = skillProjects.findIndex(
+      (project) => project.id === projectPendingDelete.id,
+    );
+    const nextProject =
+      skillProjects[currentIndex + 1] ||
+      skillProjects[currentIndex - 1] ||
+      null;
+
+    removeSkillProject(projectPendingDelete.id);
+    selectProject(nextProject?.id ?? null);
+    setSelectedProjectSkillPath(null);
+    setProjectPendingDelete(null);
+    showToast(t("skill.projectDeleted", "Project removed"), "success");
   };
 
   const handleScanProject = useCallback(
@@ -1185,6 +1211,18 @@ export function SkillProjectsView() {
                         >
                           <PencilIcon className="h-4 w-4" />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setProjectPendingDelete(selectedProject)}
+                          aria-label={t(
+                            "skill.deleteProjectTitle",
+                            "Delete project",
+                          )}
+                          title={t("skill.deleteProjectTitle", "Delete project")}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-border app-wallpaper-surface text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1433,6 +1471,21 @@ export function SkillProjectsView() {
           setEditingProject(null);
         }}
         onSubmit={handleSaveProject}
+      />
+
+      <ConfirmDialog
+        isOpen={projectPendingDelete !== null}
+        onClose={() => setProjectPendingDelete(null)}
+        onConfirm={handleConfirmDeleteProject}
+        variant="destructive"
+        title={t("skill.deleteProjectTitle", "Delete project")}
+        message={t("skill.deleteProjectMessage", {
+          name: projectPendingDelete?.name || "",
+          defaultValue:
+            'Remove project "{{name}}" from PromptHub? This only removes the project workspace record and does not delete any files.',
+        })}
+        confirmText={t("common.delete", "Delete")}
+        cancelText={t("common.cancel", "Cancel")}
       />
 
       {quickInstallSkill ? (

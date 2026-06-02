@@ -11,6 +11,7 @@ import DatabaseAdapter from "../../../src/main/database/sqlite";
 import {
   getCherryStudioSkillStatus,
   installCherryStudioSkill,
+  uninstallCherryStudioPlatformSkill,
   uninstallCherryStudioSkill,
 } from "../../../src/main/services/cherry-studio-skill-platform";
 
@@ -184,6 +185,15 @@ function getSqlRow(sql: string, ...params: unknown[]): unknown {
   }
 }
 
+function getModernSqlRow(sql: string, ...params: unknown[]): unknown {
+  const database = new DatabaseAdapter(modernDbPath());
+  try {
+    return database.get(sql, ...params);
+  } finally {
+    database.close();
+  }
+}
+
 describe("cherry-studio-skill-platform", () => {
   beforeEach(async () => {
     tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ph-cherry-skill-"));
@@ -295,6 +305,42 @@ describe("cherry-studio-skill-platform", () => {
     ).resolves.toBe(true);
   });
 
+  it("registers symlink installs in Cherry Studio DB and uninstalls only the link", async () => {
+    const sourceDir = await writeSkillPackage(
+      "linked-writer",
+      "---\nname: linked-writer\n---\ncontent",
+    );
+
+    await installCherryStudioSkill(CHERRY_PLATFORM, "linked-writer", sourceDir, {
+      ...options(),
+      mode: "symlink",
+    });
+
+    const targetDir = path.join(tempRoot, "Data", "Skills", "linked-writer");
+    await expect(
+      getCherryStudioSkillStatus(CHERRY_PLATFORM, "linked-writer", options()),
+    ).resolves.toBe(true);
+    expect((await fs.lstat(targetDir)).isSymbolicLink()).toBe(true);
+    await expect(
+      fs.readFile(path.join(targetDir, "SKILL.md"), "utf-8"),
+    ).resolves.toContain("linked-writer");
+    expect(readGlobalSkill("linked-writer")).toMatchObject({
+      folder_name: "linked-writer",
+    });
+
+    await uninstallCherryStudioSkill(
+      CHERRY_PLATFORM,
+      "linked-writer",
+      options(),
+    );
+
+    expect(readGlobalSkill("linked-writer")).toBeFalsy();
+    await expect(fs.lstat(targetDir)).rejects.toThrow();
+    await expect(
+      fs.readFile(path.join(sourceDir, "SKILL.md"), "utf-8"),
+    ).resolves.toContain("linked-writer");
+  });
+
   it("updates an existing Cherry Studio row in place so agent enablement keeps the same skill id", async () => {
     const initial = await writeSkillPackage(
       "writer-v1",
@@ -330,6 +376,101 @@ describe("cherry-studio-skill-platform", () => {
         "utf-8",
       ),
     ).resolves.toBe("updated asset");
+  });
+
+  it("updates an existing symlink install to the new source while preserving the DB row", async () => {
+    const initial = await writeSkillPackage(
+      "linked-writer-v1",
+      "---\nname: linked-writer\n---\nfirst",
+    );
+    await installCherryStudioSkill(CHERRY_PLATFORM, "linked-writer", initial, {
+      ...options(),
+      mode: "symlink",
+    });
+    const originalId = readGlobalSkill("linked-writer")?.id;
+
+    const updated = await writeSkillPackage(
+      "linked-writer-v2",
+      "---\nname: linked-writer\n---\nsecond",
+    );
+    await installCherryStudioSkill(CHERRY_PLATFORM, "linked-writer", updated, {
+      ...options(),
+      mode: "symlink",
+    });
+
+    const targetDir = path.join(tempRoot, "Data", "Skills", "linked-writer");
+    expect(readGlobalSkill("linked-writer")?.id).toBe(originalId);
+    expect(readGlobalSkill("linked-writer")?.content_hash).toBe(
+      crypto
+        .createHash("sha256")
+        .update("---\nname: linked-writer\n---\nsecond")
+        .digest("hex"),
+    );
+    expect((await fs.lstat(targetDir)).isSymbolicLink()).toBe(true);
+    await expect(fs.readlink(targetDir)).resolves.toBe(updated);
+    await expect(
+      fs.readFile(path.join(targetDir, "SKILL.md"), "utf-8"),
+    ).resolves.toContain("second");
+    await expect(
+      fs.readFile(path.join(initial, "SKILL.md"), "utf-8"),
+    ).resolves.toContain("first");
+  });
+
+  it("switches an existing copied install to a symlink without deleting the new source", async () => {
+    const copied = await writeSkillPackage(
+      "mode-writer-copy",
+      "---\nname: mode-writer\n---\ncopied",
+    );
+    await installCherryStudioSkill(CHERRY_PLATFORM, "mode-writer", copied, options());
+
+    const linked = await writeSkillPackage(
+      "mode-writer-link",
+      "---\nname: mode-writer\n---\nlinked",
+    );
+    await installCherryStudioSkill(CHERRY_PLATFORM, "mode-writer", linked, {
+      ...options(),
+      mode: "symlink",
+    });
+
+    const targetDir = path.join(tempRoot, "Data", "Skills", "mode-writer");
+    expect((await fs.lstat(targetDir)).isSymbolicLink()).toBe(true);
+    await expect(fs.readlink(targetDir)).resolves.toBe(linked);
+    await expect(
+      fs.readFile(path.join(linked, "SKILL.md"), "utf-8"),
+    ).resolves.toContain("linked");
+  });
+
+  it("switches an existing symlink install back to a copy without deleting the source", async () => {
+    const linked = await writeSkillPackage(
+      "mode-writer-link-first",
+      "---\nname: mode-writer-copy\n---\nlinked",
+    );
+    await installCherryStudioSkill(CHERRY_PLATFORM, "mode-writer-copy", linked, {
+      ...options(),
+      mode: "symlink",
+    });
+
+    const copied = await writeSkillPackage(
+      "mode-writer-copy-second",
+      "---\nname: mode-writer-copy\n---\ncopied",
+    );
+    await installCherryStudioSkill(
+      CHERRY_PLATFORM,
+      "mode-writer-copy",
+      copied,
+      options(),
+    );
+
+    const targetDir = path.join(tempRoot, "Data", "Skills", "mode-writer-copy");
+    const stat = await fs.lstat(targetDir);
+    expect(stat.isSymbolicLink()).toBe(false);
+    expect(stat.isDirectory()).toBe(true);
+    await expect(
+      fs.readFile(path.join(targetDir, "SKILL.md"), "utf-8"),
+    ).resolves.toContain("copied");
+    await expect(
+      fs.readFile(path.join(linked, "SKILL.md"), "utf-8"),
+    ).resolves.toContain("linked");
   });
 
   it("uninstalls the registry row, copied folder, and enabled agent symlink", async () => {
@@ -382,5 +523,119 @@ describe("cherry-studio-skill-platform", () => {
       fs.access(path.join(tempRoot, "Data", "Skills", "writer")),
     ).rejects.toThrow();
     await expect(fs.lstat(linkPath)).rejects.toThrow();
+  });
+
+  it("uninstalls current Cherry Studio skills from agents.db and agent_skills", async () => {
+    await fs.rm(dbPath(), { force: true });
+    await fs.mkdir(path.dirname(modernDbPath()), { recursive: true });
+    const database = new DatabaseAdapter(modernDbPath());
+    createModernCherryStudioSchema(database);
+    database.close();
+    const sourceDir = await writeSkillPackage(
+      "modern-writer",
+      "---\nname: modern-writer\n---\ncontent",
+    );
+    await installCherryStudioSkill(
+      CHERRY_PLATFORM,
+      "modern-writer",
+      sourceDir,
+      options(),
+    );
+
+    const row = getModernSqlRow(
+      "SELECT id FROM skills WHERE folder_name = ?",
+      "modern-writer",
+    ) as { id: string };
+    const now = Date.now();
+    const modernDb = new DatabaseAdapter(modernDbPath());
+    modernDb.run(
+      `INSERT INTO agents (id, type, name, accessible_paths, model, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      "agent-1",
+      "claude-code",
+      "Agent 1",
+      JSON.stringify([]),
+      "claude",
+      String(now),
+      String(now),
+    );
+    modernDb.run(
+      `INSERT INTO agent_skills (agent_id, skill_id, is_enabled, created_at, updated_at)
+       VALUES (?, ?, 0, ?, ?)`,
+      "agent-1",
+      row.id,
+      now,
+      now,
+    );
+    modernDb.close();
+
+    await uninstallCherryStudioPlatformSkill(
+      CHERRY_PLATFORM,
+      path.join(tempRoot, "Data", "Skills", "modern-writer"),
+      options(),
+    );
+
+    expect(
+      getModernSqlRow("SELECT id FROM skills WHERE id = ?", row.id),
+    ).toBeFalsy();
+    expect(
+      getModernSqlRow("SELECT skill_id FROM agent_skills WHERE skill_id = ?", row.id),
+    ).toBeFalsy();
+    await expect(
+      fs.access(path.join(tempRoot, "Data", "Skills", "modern-writer")),
+    ).rejects.toThrow();
+  });
+
+  it("rejects uninstalling Cherry Studio built-in skills and leaves data intact", async () => {
+    await fs.rm(dbPath(), { force: true });
+    await fs.mkdir(path.dirname(modernDbPath()), { recursive: true });
+    const database = new DatabaseAdapter(modernDbPath());
+    createModernCherryStudioSchema(database);
+    database.exec("ALTER TABLE skills ADD COLUMN builtin integer DEFAULT 0 NOT NULL");
+    database.close();
+    const sourceDir = await writeSkillPackage(
+      "builtin-writer",
+      "---\nname: builtin-writer\n---\ncontent",
+    );
+    await installCherryStudioSkill(
+      CHERRY_PLATFORM,
+      "builtin-writer",
+      sourceDir,
+      options(),
+    );
+    const modernDb = new DatabaseAdapter(modernDbPath());
+    modernDb.run(
+      "UPDATE skills SET builtin = 1 WHERE folder_name = ?",
+      "builtin-writer",
+    );
+    modernDb.close();
+
+    await expect(
+      uninstallCherryStudioPlatformSkill(
+        CHERRY_PLATFORM,
+        path.join(tempRoot, "Data", "Skills", "builtin-writer"),
+        options(),
+      ),
+    ).rejects.toThrow(/built-in skill/);
+
+    expect(
+      getModernSqlRow(
+        "SELECT id FROM skills WHERE folder_name = ? AND builtin = 1",
+        "builtin-writer",
+      ),
+    ).toBeTruthy();
+    await expect(
+      fs.access(path.join(tempRoot, "Data", "Skills", "builtin-writer", "SKILL.md")),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects platform-skill uninstall paths outside Cherry Studio skills dir", async () => {
+    await expect(
+      uninstallCherryStudioPlatformSkill(
+        CHERRY_PLATFORM,
+        path.join(tempRoot, "outside", "writer"),
+        options(),
+      ),
+    ).rejects.toThrow(/outside platform/);
   });
 });

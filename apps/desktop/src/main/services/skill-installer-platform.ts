@@ -597,9 +597,20 @@ async function inspectPlatformSkillInstall(
 ): Promise<SkillPlatformInstallStatus> {
   validateSkillName(platformSkillName);
   if (isCherryStudioPlatform(platform.id)) {
-    return (await getCherryStudioSkillStatus(platform, platformSkillName))
-      ? { installed: true, mode: "copy" }
-      : { installed: false };
+    if (!(await getCherryStudioSkillStatus(platform, platformSkillName))) {
+      return { installed: false };
+    }
+
+    const skillDir = path.join(getPlatformSkillsDir(platform), platformSkillName);
+    try {
+      const stat = await fs.lstat(skillDir);
+      return {
+        installed: true,
+        mode: stat.isSymbolicLink() ? "symlink" : "copy",
+      };
+    } catch {
+      return { installed: true, mode: "copy" };
+    }
   }
 
   const skillDir = path.join(getPlatformSkillsDir(platform), platformSkillName);
@@ -706,12 +717,13 @@ export async function installSkillMdSymlink(
 
   try {
     if (isCherryStudioPlatform(platform.id)) {
-      await installCherryStudioSkill(platform, skillName, canonicalDir);
+      await installCherryStudioSkill(platform, skillName, canonicalDir, {
+        mode: "symlink",
+      });
       await cleanupLegacyCherryStudioSkills(platform, skillName, options?.legacySkillNames);
       return {
         requestedMode: "symlink",
-        effectiveMode: "copy",
-        fallbackReason: "Cherry Studio requires database registration",
+        effectiveMode: "symlink",
       };
     }
 

@@ -49,6 +49,10 @@ import {
   SKILL_PLATFORMS,
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
+import {
+  isCherryStudioPlatform,
+  uninstallCherryStudioPlatformSkill,
+} from "./cherry-studio-skill-platform";
 
 function parseJson<T>(raw: string, fallback: T): T {
   try {
@@ -371,7 +375,14 @@ export class SkillInstaller {
       relativeTarget === "" ||
       relativeTarget === "."
     ) {
-      throw new Error("Path traversal detected: skill path is outside platform");
+      throw new Error(
+        "Path traversal detected: skill path is outside platform",
+      );
+    }
+
+    if (isCherryStudioPlatform(platform.id)) {
+      await uninstallCherryStudioPlatformSkill(platform, targetPath);
+      return;
     }
 
     if (await fileExists(targetPath)) {

@@ -298,7 +298,74 @@ describe("SkillInstaller.scanPlatformSkills", () => {
     await expect(
       SkillInstaller.uninstallPlatformSkill("claude", outsideSkillDir),
     ).rejects.toThrow(/outside platform/);
-    expect(fsSync.existsSync(path.join(outsideSkillDir, "SKILL.md"))).toBe(true);
+    expect(fsSync.existsSync(path.join(outsideSkillDir, "SKILL.md"))).toBe(
+      true,
+    );
+  });
+
+  it("uninstalls Cherry Studio scanned skills through the database-backed adapter", async () => {
+    const cherryRoot = path.join(tmpDir, "CherryStudio");
+    const cherrySkillsDir = path.join(cherryRoot, "Data", "Skills");
+    const skillDir = path.join(cherrySkillsDir, "writer");
+    const dbPath = path.join(cherryRoot, "Data", "agents.db");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: writer\n---",
+    );
+    await fs.mkdir(path.dirname(dbPath), { recursive: true });
+    const database = new Database(dbPath);
+    database.exec(`
+      CREATE TABLE skills (
+        id text PRIMARY KEY NOT NULL,
+        folder_name text NOT NULL
+      );
+      CREATE TABLE agents (
+        id text PRIMARY KEY NOT NULL,
+        accessible_paths text
+      );
+      CREATE TABLE agent_skills (
+        agent_id text NOT NULL,
+        skill_id text NOT NULL,
+        is_enabled integer DEFAULT false NOT NULL
+      );
+    `);
+    database.run(
+      "INSERT INTO skills (id, folder_name) VALUES (?, ?)",
+      "skill-1",
+      "writer",
+    );
+    database.run(
+      "INSERT INTO agent_skills (agent_id, skill_id, is_enabled) VALUES (?, ?, 0)",
+      "agent-1",
+      "skill-1",
+    );
+    database.close();
+
+    vi.spyOn(skillInstallerUtils, "getPlatformRootDir").mockReturnValue(
+      cherryRoot,
+    );
+    vi.spyOn(skillInstallerUtils, "getPlatformSkillsDir").mockReturnValue(
+      cherrySkillsDir,
+    );
+
+    await SkillInstaller.uninstallPlatformSkill("cherry-studio", skillDir);
+
+    const verifyDb = new Database(dbPath);
+    try {
+      expect(
+        verifyDb.get("SELECT id FROM skills WHERE id = ?", "skill-1"),
+      ).toBeFalsy();
+      expect(
+        verifyDb.get(
+          "SELECT skill_id FROM agent_skills WHERE skill_id = ?",
+          "skill-1",
+        ),
+      ).toBeFalsy();
+    } finally {
+      verifyDb.close();
+    }
+    expect(fsSync.existsSync(skillDir)).toBe(false);
   });
 });
 

@@ -56,7 +56,34 @@ vi.mock("../../../src/renderer/components/ui/Modal", () => ({
 }));
 
 vi.mock("../../../src/renderer/components/ui/ConfirmDialog", () => ({
-  ConfirmDialog: () => null,
+  ConfirmDialog: ({
+    isOpen,
+    onClose,
+    onConfirm,
+    title,
+    message,
+    confirmText = "Confirm",
+    cancelText = "Cancel",
+  }: {
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+    title?: string;
+    message?: ReactNode;
+    confirmText?: string;
+    cancelText?: string;
+  }) =>
+    isOpen ? (
+      <div role="dialog" aria-label={title}>
+        <div>{message}</div>
+        <button type="button" onClick={onClose}>
+          {cancelText}
+        </button>
+        <button type="button" onClick={onConfirm}>
+          {confirmText}
+        </button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("../../../src/renderer/components/skill/SkillQuickInstall", () => ({
@@ -180,6 +207,10 @@ describe("SkillProjectsView", () => {
       "h-9",
       "w-9",
     );
+    expect(screen.getByRole("button", { name: "Delete project" })).toHaveClass(
+      "h-9",
+      "w-9",
+    );
     expect(screen.getByRole("button", { name: "Edit" })).toHaveClass(
       "h-9",
       "w-9",
@@ -259,6 +290,59 @@ describe("SkillProjectsView", () => {
     expect(screen.queryByText("Source / Content")).not.toBeInTheDocument();
     expect(screen.getByText("novel-auditor")).toBeInTheDocument();
     expect(screen.getByText("novel-builder")).toBeInTheDocument();
+  });
+
+  it("removes a registered project after confirmation without deleting files", async () => {
+    const removeSkillProject = vi.fn();
+    const selectProject = vi.fn();
+
+    useSettingsStore.setState({
+      skillProjects: [
+        {
+          id: "project-1",
+          name: "Novel",
+          rootPath: "/tmp/novel",
+          scanPaths: [],
+          deployTargets: ["/tmp/novel/.agents/skills"],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "project-2",
+          name: "Work",
+          rootPath: "/tmp/work",
+          scanPaths: [],
+          deployTargets: ["/tmp/work/.agents/skills"],
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+      removeSkillProject,
+    } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+    useSkillStore.setState({
+      selectedProjectId: "project-1",
+      selectProject,
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      render(<SkillProjectsView />);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete project" }));
+
+    expect(screen.getByRole("dialog", { name: "Delete project" }))
+      .toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Remove project "{{name}}" from PromptHub? This only removes the project workspace record and does not delete any files.',
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(removeSkillProject).toHaveBeenCalledWith("project-1");
+    expect(selectProject).toHaveBeenCalledWith("project-2");
+    expect(showToastMock).toHaveBeenCalledWith("Project removed", "success");
   });
 
   it("keeps the project skill view selected when opening and returning from project detail", async () => {

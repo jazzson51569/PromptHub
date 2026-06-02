@@ -1057,6 +1057,44 @@ description: Use this skill for PDF tasks.
     expect(getAll).not.toHaveBeenCalled();
   });
 
+  it("uninstalls a store skill using the same fallback identity as imported-state detection", async () => {
+    const deleteSkill = vi.fn().mockResolvedValue(true);
+    const getAll = vi.fn().mockResolvedValue([]);
+    (window as any).api.skill.delete = deleteSkill;
+    (window as any).api.skill.getAll = getAll;
+
+    useSkillStore.setState({
+      registrySkills: [
+        {
+          slug: "writer",
+          name: "Writer",
+          description: "Store writer",
+          category: "general",
+          tags: ["writing"],
+          version: "1.0.0",
+          content: "# Writer\n",
+        },
+      ],
+      skills: [
+        createSkillFixture({
+          id: "skill-writer",
+          name: "Writer",
+          registry_slug: "writer",
+          source_id: undefined,
+          source_url: undefined,
+          content_url: undefined,
+        }),
+      ],
+    } as never);
+
+    await expect(
+      useSkillStore.getState().uninstallRegistrySkill("writer"),
+    ).resolves.toBe(true);
+
+    expect(deleteSkill).toHaveBeenCalledWith("skill-writer");
+    expect(getAll).toHaveBeenCalled();
+  });
+
   it("updates a pristine skill from a cached local store source entry using the latest local file", async () => {
     const versionCreate = vi.fn().mockResolvedValue({ id: "version-local" });
     const update = vi.fn().mockImplementation(async (_id, data) => ({

@@ -20,3 +20,8 @@
 - [x] 修复从 Agent/平台目录导入到我的 Skill 后，全局分发面板仍显示对应平台未安装的问题
 - [x] 优化全局平台安装成功提示，显示具体 Skill 名和目标平台名
 - [x] 完善 Skill 来源标签：区分本地文件夹导入、项目导入、商店/Git 导入和具体 Agent 平台导入
+- [x] 修复 Cherry Studio 平台扫描页卸载只删除文件夹、不删除 `agents.db` 中 `skills` / `agent_skills` 记录的问题，并禁止删除 Cherry Studio 内置 Skill
+- [x] 修正 Cherry Studio 软连接分发：支持 DB 注册 + `Data/Skills/<folder>` 目录 symlink，并验证卸载只删除链接不删除 PromptHub 源目录
+- [x] 补齐 Cherry Studio 软连接分发 CRUD 覆盖：创建、状态读取、重复安装更新、copy/symlink 模式互切、卸载与失败回退
+- [x] 修复商店详情“从我的 Skill 中移除”按钮：移除动作复用已导入状态的 source/slug/content URL fallback 匹配，避免显示已导入但点击无效
+- [x] 为项目 Skill 工作区补充删除项目入口：二次确认后移除 PromptHub 项目记录与偏好，不删除磁盘文件，并自动切换到下一个项目

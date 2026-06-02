@@ -291,6 +291,27 @@ function getRegistrySkillCandidates(state: SkillState): RegistrySkill[] {
   return [...state.registrySkills, ...remoteSkills];
 }
 
+function findRegistrySkillCandidateByKey(
+  state: SkillState,
+  key: string,
+): RegistrySkill | null {
+  const normalizedKey = key.trim().toLowerCase();
+  if (!normalizedKey) {
+    return null;
+  }
+
+  return (
+    getRegistrySkillCandidates(state).find((skill) =>
+      [
+        skill.source_id,
+        skill.slug,
+        skill.source_url,
+        skill.content_url,
+      ].some((value) => value?.trim().toLowerCase() === normalizedKey),
+    ) || null
+  );
+}
+
 function ensureRegistrySkillSourceId(skill: RegistrySkill): RegistrySkill {
   if (skill.source_id) {
     return skill;
@@ -1373,9 +1394,7 @@ export const useSkillStore = create<SkillState>()(
       },
 
       updateRegistrySkill: async (sourceId, options) => {
-        const regSkill = getRegistrySkillCandidates(get()).find(
-          (skill) => skill.source_id === sourceId,
-        );
+        const regSkill = findRegistrySkillCandidateByKey(get(), sourceId);
         if (!regSkill) return null;
 
         const check = await get().getRegistrySkillUpdateStatus(regSkill);
@@ -1535,16 +1554,17 @@ export const useSkillStore = create<SkillState>()(
 
       installFromRegistry: async (sourceId) => {
         const { installRegistrySkill } = get();
-        const regSkill = getRegistrySkillCandidates(get()).find(
-          (s) => s.source_id === sourceId,
-        );
+        const regSkill = findRegistrySkillCandidateByKey(get(), sourceId);
         if (!regSkill) return null;
         return installRegistrySkill(regSkill);
       },
 
       uninstallRegistrySkill: async (sourceId) => {
         const { skills, loadSkills } = get();
-        const skill = skills.find((s) => s.source_id === sourceId);
+        const regSkill = findRegistrySkillCandidateByKey(get(), sourceId);
+        const skill = regSkill
+          ? findInstalledRegistrySkill(skills, regSkill)
+          : skills.find((s) => s.source_id === sourceId);
         if (!skill) return false;
 
         try {
