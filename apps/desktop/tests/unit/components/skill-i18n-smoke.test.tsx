@@ -348,7 +348,7 @@ describe("skill i18n smoke", () => {
     expect(screen.getByTestId("skill-view-transition")).toHaveClass(
       "animate-in",
       "fade-in",
-      "slide-in-from-bottom-2",
+      "slide-in-from-right-3",
       "duration-smooth",
     );
     expect(
@@ -1202,7 +1202,7 @@ describe("skill i18n smoke", () => {
     expect(screen.getByTestId("skill-view-transition")).toHaveClass(
       "animate-in",
       "fade-in",
-      "slide-in-from-bottom-2",
+      "slide-in-from-right-3",
       "duration-smooth",
     );
     expect(await screen.findByText("Official Store")).toBeInTheDocument();

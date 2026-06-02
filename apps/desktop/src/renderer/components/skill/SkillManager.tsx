@@ -69,7 +69,7 @@ const SKILL_GALLERY_COLUMNS: SkillGalleryColumnMode[] = [
 ];
 const LOCAL_SKILL_SCAN_TIMEOUT_MS = 30_000;
 const SKILL_VIEW_TRANSITION_CLASS =
-  "h-full min-h-0 animate-in fade-in slide-in-from-bottom-2 duration-smooth";
+  "h-full min-h-0 animate-in fade-in slide-in-from-right-3 duration-smooth";
 
 interface SkillViewTransitionProps
   extends React.HTMLAttributes<HTMLDivElement> {

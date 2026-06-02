@@ -194,6 +194,16 @@ describe("SkillProjectsView", () => {
     });
 
     expect(screen.getByTestId("project-skills-list")).toHaveClass("space-y-2");
+    expect(screen.getByTestId("project-detail-shell")).toHaveAttribute(
+      "data-project-id",
+      "project-1",
+    );
+    expect(screen.getByTestId("project-detail-shell")).toHaveClass(
+      "animate-in",
+      "fade-in",
+      "slide-in-from-right-3",
+      "duration-smooth",
+    );
     expect(screen.getAllByText("Novel")).toHaveLength(2);
     expect(screen.getByText("novel-auditor")).toBeInTheDocument();
     expect(screen.getByText("novel-builder")).toBeInTheDocument();

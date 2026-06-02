@@ -221,6 +221,7 @@ describe("Sidebar", () => {
       deployedSkillNames: new Set<string>(),
       storeView: "my-skills",
       selectedSkillId: null,
+      agentScanState: {},
       registrySkills: [],
       selectedStoreSourceId: "official",
       customStoreSources: [],
@@ -278,6 +279,54 @@ describe("Sidebar", () => {
         screen.getByRole("button", { name: /Agent Skills/i }),
       ).toHaveTextContent("2");
     });
+  });
+
+  it("uses cached agent scan count before platform detection finishes", async () => {
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn(
+            () => new Promise<never>(() => undefined),
+          ),
+          detectPlatforms: vi.fn(() => new Promise<never>(() => undefined)),
+        },
+      },
+    });
+    useSkillStore.setState({
+      agentScanState: {
+        claude: {
+          result: {
+            platform: { id: "claude", name: "Claude Code" },
+            skillsDir: "/agents/claude/skills",
+            scannedSkills: [],
+          },
+          isScanning: false,
+          scannedAt: 1,
+          error: null,
+        },
+        codex: {
+          result: {
+            platform: { id: "codex", name: "Codex CLI" },
+            skillsDir: "/agents/codex/skills",
+            scannedSkills: [],
+          },
+          isScanning: false,
+          scannedAt: 1,
+          error: null,
+        },
+      },
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      await renderWithI18n(
+        <Sidebar currentPage="home" onNavigate={vi.fn()} />,
+        { language: "en" },
+      );
+    });
+
+    expect(
+      screen.getByRole("button", { name: /Agent Skills/i }),
+    ).toHaveTextContent("2");
   });
 
   it("passes direct prompt counts to the folder tree", async () => {

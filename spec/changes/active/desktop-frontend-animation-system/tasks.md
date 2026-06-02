@@ -65,4 +65,5 @@
 ## Cross-cutting
 
 - [x] 所有 commit 跑过 `pnpm --filter @prompthub/desktop typecheck && lint && test:unit && test:integration && build && bundle:budget`
+- [x] Skill 管理补齐横向页面/详情切换动画：My Skills / Store / Project Skills / Agent Skills 顶层切换，以及 Project/Agent 内部目标切换
 - [ ] PR 描述附 motionPreference 3 档体感对比（GIF / 视频）（PR 时补）

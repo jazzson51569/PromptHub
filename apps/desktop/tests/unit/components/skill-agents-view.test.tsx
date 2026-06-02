@@ -259,6 +259,16 @@ describe("SkillAgentsView", () => {
     expect(screen.getByTestId("agent-detail-shell")).toHaveClass(
       "app-wallpaper-section",
     );
+    expect(screen.getByTestId("agent-detail-shell")).toHaveAttribute(
+      "data-agent-id",
+      "claude",
+    );
+    expect(screen.getByTestId("agent-detail-shell")).toHaveClass(
+      "animate-in",
+      "fade-in",
+      "slide-in-from-right-3",
+      "duration-smooth",
+    );
     expect(screen.getByTestId("agent-detail-shell")).not.toHaveClass(
       "app-wallpaper-panel",
     );
@@ -521,10 +531,17 @@ describe("SkillAgentsView", () => {
 
     render(<SkillAgentsView />);
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: /Install My Skill/i }),
-    );
-    const dialog = screen.getByRole("dialog", { name: /Install My Skill/i });
+    expect(
+      await screen.findByRole("button", { name: /Claude Code/i }),
+    ).toHaveTextContent("2 skills");
+    const installButton = await screen.findByRole("button", {
+      name: /Install My Skill/i,
+    });
+    expect(installButton).not.toBeDisabled();
+    fireEvent.click(installButton);
+    const dialog = await screen.findByRole("dialog", {
+      name: /Install My Skill/i,
+    });
     expect(
       within(dialog).queryByText("Advanced Import Settings"),
     ).not.toBeInTheDocument();

@@ -651,8 +651,10 @@ export function SkillAgentsView() {
           </div>
 
           <div
+            key={selectedPlatformId ?? "no-agent"}
             data-testid="agent-detail-shell"
-            className="flex min-w-0 flex-1 flex-col app-wallpaper-section"
+            data-agent-id={selectedPlatformId ?? ""}
+            className="flex min-w-0 flex-1 flex-col app-wallpaper-section animate-in fade-in slide-in-from-right-3 duration-smooth"
           >
             <div
               data-testid="agent-detail-header"

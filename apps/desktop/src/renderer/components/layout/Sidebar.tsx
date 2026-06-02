@@ -268,6 +268,7 @@ export function Sidebar({
   const selectStoreSource = useSkillStore((state) => state.selectStoreSource);
   const customStoreSources = useSkillStore((state) => state.customStoreSources);
   const remoteStoreEntries = useSkillStore((state) => state.remoteStoreEntries);
+  const agentScanState = useSkillStore((state) => state.agentScanState);
   const skillFilterTags = useSkillStore((state) => state.filterTags);
   const toggleSkillFilterTag = useSkillStore((state) => state.toggleFilterTag);
   const clearSkillFilterTags = useSkillStore((state) => state.clearFilterTags);
@@ -280,7 +281,19 @@ export function Sidebar({
     [remoteStoreEntries],
   );
   const [showAllSkillTags, setShowAllSkillTags] = useState(false);
-  const [detectedSkillAgentCount, setDetectedSkillAgentCount] = useState(0);
+  const [detectedSkillAgentCount, setDetectedSkillAgentCount] = useState<
+    number | null
+  >(null);
+  const cachedSkillAgentCount = useMemo(
+    () =>
+      Object.entries(agentScanState).filter(
+        ([platformId, state]) =>
+          state?.result && !disabledPlatformIds.includes(platformId),
+      ).length,
+    [agentScanState, disabledPlatformIds],
+  );
+  const visibleSkillAgentCount =
+    detectedSkillAgentCount ?? cachedSkillAgentCount;
   const promptStats = useMemo(() => buildPromptStats(prompts), [prompts]);
   const folderPromptCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -317,7 +330,7 @@ export function Sidebar({
       !runtimeCapabilities.skillLocalScan ||
       !window.api?.skill
     ) {
-      setDetectedSkillAgentCount(0);
+      setDetectedSkillAgentCount(null);
       return;
     }
 
@@ -337,7 +350,7 @@ export function Sidebar({
         );
       } catch {
         if (!disposed) {
-          setDetectedSkillAgentCount(0);
+          setDetectedSkillAgentCount(null);
         }
       }
     };
@@ -1298,7 +1311,7 @@ export function Sidebar({
                       <NavItem
                         icon={<BotIcon className="w-5 h-5" />}
                         label={t("nav.agentSkills", "Agent Skills")}
-                        count={detectedSkillAgentCount}
+                        count={visibleSkillAgentCount}
                         active={
                           storeView === "agents" && currentPage === "home"
                         }

@@ -1158,7 +1158,12 @@ export function SkillProjectsView() {
 
           <div className="flex min-w-0 flex-1 overflow-hidden">
             {selectedProject ? (
-              <div className="min-w-0 flex-1 overflow-hidden">
+              <div
+                key={selectedProject.id}
+                data-testid="project-detail-shell"
+                data-project-id={selectedProject.id}
+                className="min-w-0 flex-1 overflow-hidden animate-in fade-in slide-in-from-right-3 duration-smooth"
+              >
                 <div className="flex h-full min-h-0 flex-col overflow-hidden">
                   <div className={PROJECT_SECTION_HEADER_CLASS}>
                     <div className="flex h-full items-start justify-between gap-4 px-6 py-4">
