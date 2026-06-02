@@ -4,10 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   XIcon,
   FileTextIcon,
-  FileCodeIcon,
   FileIcon,
-  FolderIcon,
-  FolderOpenIcon,
   FolderPlusIcon,
   FilePlusIcon,
   Trash2Icon,
@@ -16,10 +13,22 @@ import {
   Loader2Icon,
   ChevronRightIcon,
   PencilIcon,
+  RotateCcwIcon,
+  ImageIcon,
+  MusicIcon,
+  VideoIcon,
+  MinusIcon,
+  PlusIcon,
+  Maximize2Icon,
 } from "lucide-react";
 import { UnsavedChangesDialog } from "../ui/UnsavedChangesDialog";
 import { useToast } from "../ui/Toast";
 import { scheduleAllSaveSync } from "../../services/webdav-save-sync";
+import {
+  SkillCodeEditor,
+  getSkillCodeEditorLanguageName,
+} from "./SkillCodeEditor";
+import { getSkillFileIconUrl } from "./skill-file-icons";
 import "./SkillFileEditor.css";
 
 // ─── Types ──────────────────────────────────────────────
@@ -43,6 +52,9 @@ interface FileEntry {
   path: string;
   content: string;
   isDirectory: boolean;
+  mimeType?: string;
+  encoding?: "text" | "data-url" | "placeholder";
+  previewKind?: "image" | "audio" | "video" | "pdf";
 }
 
 interface FileTreeEntry {
@@ -69,36 +81,15 @@ interface ContextMenuState {
 // ─── Helpers ────────────────────────────────────────────
 
 function getFileIcon(name: string, isDirectory: boolean, isOpen: boolean) {
-  if (isDirectory) {
-    return isOpen ? (
-      <FolderOpenIcon className="skill-file-editor__tree-item-icon" />
-    ) : (
-      <FolderIcon className="skill-file-editor__tree-item-icon" />
-    );
-  }
-  const ext = name.split(".").pop()?.toLowerCase() || "";
-  if (["md", "mdx"].includes(ext)) {
-    return <FileTextIcon className="skill-file-editor__tree-item-icon" />;
-  }
-  if (
-    [
-      "py",
-      "js",
-      "ts",
-      "tsx",
-      "jsx",
-      "sh",
-      "yaml",
-      "yml",
-      "toml",
-      "json",
-      "css",
-      "html",
-    ].includes(ext)
-  ) {
-    return <FileCodeIcon className="skill-file-editor__tree-item-icon" />;
-  }
-  return <FileIcon className="skill-file-editor__tree-item-icon" />;
+  return (
+    <img
+      src={getSkillFileIconUrl(name, isDirectory, isOpen)}
+      alt=""
+      aria-hidden="true"
+      className="skill-file-editor__tree-item-icon"
+      draggable={false}
+    />
+  );
 }
 
 function isMarkdownFile(path: string): boolean {
@@ -106,17 +97,31 @@ function isMarkdownFile(path: string): boolean {
   return ["md", "mdx"].includes(ext);
 }
 
-function isHiddenSkillRepoEntry(path: string): boolean {
+function normalizeSkillRelativePath(path: string): string {
   return path
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/\/+/g, "/");
+}
+
+function isHiddenSkillRepoEntry(path: string): boolean {
+  return normalizeSkillRelativePath(path)
     .split("/")
     .some((segment) => segment === ".git" || segment === ".prompthub");
+}
+
+function normalizeFileTreeEntry(entry: FileTreeEntry): FileTreeEntry {
+  return {
+    ...entry,
+    path: normalizeSkillRelativePath(entry.path),
+  };
 }
 
 function buildTree(files: FileTreeEntry[]): TreeNode[] {
   const root: TreeNode[] = [];
 
   // Sort: directories first, then alphabetical
-  const sorted = [...files].sort((a, b) => {
+  const sorted = files.map(normalizeFileTreeEntry).sort((a, b) => {
     if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
     return a.path.localeCompare(b.path);
   });
@@ -156,6 +161,80 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function isEditableFile(file: FileEntry | null): boolean {
+  if (!file || file.isDirectory) {
+    return false;
+  }
+  return file.encoding !== "data-url" && file.content !== "[binary file]";
+}
+
+function ResourcePreview({
+  file,
+  emptyLabel,
+  imageZoom,
+}: {
+  file: FileEntry;
+  emptyLabel: string;
+  imageZoom: number;
+}) {
+  if (file.encoding !== "data-url" || !file.previewKind) {
+    return (
+      <div className="skill-file-editor__resource-preview skill-file-editor__resource-preview--empty">
+        <FileIcon style={{ width: "2rem", height: "2rem" }} />
+        <span>{emptyLabel}</span>
+      </div>
+    );
+  }
+
+  if (file.previewKind === "image") {
+    return (
+      <div className="skill-file-editor__resource-preview">
+        <img
+          src={file.content}
+          alt={file.path}
+          className="skill-file-editor__resource-image"
+          style={{ transform: `scale(${imageZoom})` }}
+        />
+      </div>
+    );
+  }
+
+  if (file.previewKind === "audio") {
+    return (
+      <div className="skill-file-editor__resource-preview skill-file-editor__resource-preview--media">
+        <MusicIcon style={{ width: "2rem", height: "2rem" }} />
+        <audio
+          controls
+          src={file.content}
+          className="skill-file-editor__resource-audio"
+        />
+      </div>
+    );
+  }
+
+  if (file.previewKind === "video") {
+    return (
+      <div className="skill-file-editor__resource-preview">
+        <video
+          controls
+          src={file.content}
+          className="skill-file-editor__resource-video"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="skill-file-editor__resource-preview">
+      <iframe
+        src={file.content}
+        title={file.path}
+        className="skill-file-editor__resource-pdf"
+      />
+    </div>
+  );
 }
 
 // ─── Sub-components ─────────────────────────────────────
@@ -221,11 +300,12 @@ export function SkillFileEditor({
   const [dialogInput, setDialogInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isUnsavedDialogOpen, setIsUnsavedDialogOpen] = useState(false);
+  const [isEditingFileContent, setIsEditingFileContent] = useState(false);
+  const [resourceZoom, setResourceZoom] = useState(1);
   const [pendingUnsavedAction, setPendingUnsavedAction] = useState<
     (() => void) | null
   >(null);
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const activeSourceKeyRef = useRef<string | null>(null);
   const isPathMode = Boolean(localPath);
   const sourceKey = localPath ? `path:${localPath}` : `skill:${skillId}`;
@@ -304,7 +384,8 @@ export function SkillFileEditor({
     setIsLoading(true);
     try {
       const result = await listFiles();
-      const visibleEntries = result.filter(
+      const normalizedEntries = result.map(normalizeFileTreeEntry);
+      const visibleEntries = normalizedEntries.filter(
         (entry) => !isHiddenSkillRepoEntry(entry.path),
       );
       setFiles(visibleEntries);
@@ -416,6 +497,25 @@ export function SkillFileEditor({
     setModifiedFiles({});
   }, []);
 
+  const discardCurrentFileChanges = useCallback(() => {
+    if (!selectedFile) {
+      return;
+    }
+    setModifiedFiles((prev) => {
+      if (!(selectedFile in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[selectedFile];
+      return next;
+    });
+  }, [selectedFile]);
+
+  const cancelCurrentFileEditing = useCallback(() => {
+    discardCurrentFileChanges();
+    setIsEditingFileContent(false);
+  }, [discardCurrentFileChanges]);
+
   const runWithUnsavedChangesCheck = useCallback(
     (action: () => void) => {
       if (!hasAnyUnsaved) {
@@ -438,7 +538,13 @@ export function SkillFileEditor({
       try {
         const result = await readFile(path);
         if (result && !result.isDirectory) {
-          setLoadedFiles((prev) => ({ ...prev, [path]: result }));
+          setLoadedFiles((prev) => ({
+            ...prev,
+            [path]: {
+              ...result,
+              path: normalizeSkillRelativePath(result.path || path),
+            },
+          }));
         }
       } catch (error) {
         console.error("Failed to read skill file:", error);
@@ -466,6 +572,11 @@ export function SkillFileEditor({
     void loadSelectedFileContent(selectedFile);
   }, [files, loadSelectedFileContent, selectedFile]);
 
+  useEffect(() => {
+    setIsEditingFileContent(false);
+    setResourceZoom(1);
+  }, [selectedFile]);
+
   // Build tree
   const tree = useMemo(() => buildTree(files), [files]);
 
@@ -489,6 +600,19 @@ export function SkillFileEditor({
     if (selectedFile in modifiedFiles) return modifiedFiles[selectedFile];
     return currentFile?.content || "";
   }, [selectedFile, modifiedFiles, currentFile]);
+
+  const currentLanguageName = useMemo(
+    () => getSkillCodeEditorLanguageName(selectedFile || ""),
+    [selectedFile],
+  );
+  const canEditCurrentFile = isEditableFile(currentFile);
+  const isImagePreview = currentFile?.previewKind === "image";
+
+  useEffect(() => {
+    if (!canEditCurrentFile) {
+      setIsEditingFileContent(false);
+    }
+  }, [canEditCurrentFile]);
 
   const isModified = useCallback(
     (path: string) => path in modifiedFiles,
@@ -984,20 +1108,132 @@ export function SkillFileEditor({
                   )}
                 </div>
                 <div className="skill-file-editor__editor-tabs">
+                  {isImagePreview && (
+                    <div className="skill-file-editor__zoom-controls">
+                      <button
+                        className="skill-file-editor__editor-tab skill-file-editor__editor-tab--icon"
+                        type="button"
+                        onClick={() =>
+                          setResourceZoom((current) =>
+                            Math.max(0.25, Number((current - 0.25).toFixed(2))),
+                          )
+                        }
+                        disabled={resourceZoom <= 0.25}
+                        title={t("skill.zoomOut", "Zoom out")}
+                        aria-label={t("skill.zoomOut", "Zoom out")}
+                      >
+                        <MinusIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      </button>
+                      <button
+                        className="skill-file-editor__editor-tab"
+                        type="button"
+                        onClick={() => setResourceZoom(1)}
+                        disabled={resourceZoom === 1}
+                        title={t("skill.resetZoom", "Reset zoom")}
+                        aria-label={t("skill.resetZoom", "Reset zoom")}
+                      >
+                        <Maximize2Icon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                        <span>{Math.round(resourceZoom * 100)}%</span>
+                      </button>
+                      <button
+                        className="skill-file-editor__editor-tab skill-file-editor__editor-tab--icon"
+                        type="button"
+                        onClick={() =>
+                          setResourceZoom((current) =>
+                            Math.min(4, Number((current + 0.25).toFixed(2))),
+                          )
+                        }
+                        disabled={resourceZoom >= 4}
+                        title={t("skill.zoomIn", "Zoom in")}
+                        aria-label={t("skill.zoomIn", "Zoom in")}
+                      >
+                        <PlusIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      </button>
+                    </div>
+                  )}
+                  {!canEditCurrentFile ? (
+                    <div className="skill-file-editor__edit-state skill-file-editor__edit-state--readonly">
+                      {currentFile?.previewKind === "image" ? (
+                        <ImageIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      ) : currentFile?.previewKind === "audio" ? (
+                        <MusicIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      ) : currentFile?.previewKind === "video" ? (
+                        <VideoIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      ) : (
+                        <FileIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      )}
+                      {currentFile?.previewKind
+                        ? t("skill.resourcePreview", "Preview")
+                        : t("skill.binaryFile", "Binary file cannot be edited")}
+                    </div>
+                  ) : !isEditingFileContent ? (
+                    <button
+                      className="skill-file-editor__editor-tab"
+                      onClick={() => setIsEditingFileContent(true)}
+                      title={t("prompt.edit", "Edit")}
+                    >
+                      <PencilIcon
+                        style={{ width: "0.875rem", height: "0.875rem" }}
+                      />
+                      <span>{t("prompt.edit", "Edit")}</span>
+                    </button>
+                  ) : (
+                    <>
+                      <div className="skill-file-editor__edit-state">
+                        <PencilIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                        {t("skill.editing", "Editing")}
+                      </div>
+                      <button
+                        className="skill-file-editor__editor-tab skill-file-editor__editor-tab--icon"
+                        onClick={discardCurrentFileChanges}
+                        disabled={!isModified(selectedFile)}
+                        title={t(
+                          "skill.discardCurrentFileChanges",
+                          "Discard changes",
+                        )}
+                        aria-label={t(
+                          "skill.discardCurrentFileChanges",
+                          "Discard changes",
+                        )}
+                      >
+                        <RotateCcwIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      </button>
+                      <button
+                        className="skill-file-editor__editor-tab skill-file-editor__editor-tab--icon"
+                        onClick={cancelCurrentFileEditing}
+                        title={t("common.cancel", "Cancel")}
+                        aria-label={t("common.cancel", "Cancel")}
+                      >
+                        <XIcon
+                          style={{ width: "0.875rem", height: "0.875rem" }}
+                        />
+                      </button>
+                    </>
+                  )}
                   <button
-                    className="skill-file-editor__editor-tab skill-file-editor__editor-tab--active"
-                    onClick={() => undefined}
-                  >
-                    {t("prompt.edit", "Edit")}
-                  </button>
-                  <button
-                    className="skill-file-editor__editor-tab"
+                    className="skill-file-editor__editor-tab skill-file-editor__editor-tab--icon"
                     onClick={saveCurrentFile}
                     disabled={isSaving || !isModified(selectedFile)}
-                    style={{
-                      opacity: isSaving || !isModified(selectedFile) ? 0.4 : 1,
-                    }}
                     title="Cmd/Ctrl+S"
+                    aria-label={t("common.save", "Save")}
                   >
                     {isSaving ? (
                       <Loader2Icon
@@ -1024,13 +1260,22 @@ export function SkillFileEditor({
                   <div className="skill-file-editor__loading">
                     <Loader2Icon style={{ width: "1rem", height: "1rem" }} />
                   </div>
+                ) : currentFile.previewKind ||
+                  currentFile.encoding === "data-url" ? (
+                  <ResourcePreview
+                    file={currentFile}
+                    imageZoom={resourceZoom}
+                    emptyLabel={t(
+                      "skill.binaryFile",
+                      "Binary file cannot be edited",
+                    )}
+                  />
                 ) : (
-                  <textarea
-                    ref={textareaRef}
-                    className="skill-file-editor__textarea"
+                  <SkillCodeEditor
+                    path={selectedFile}
                     value={currentContent}
-                    onChange={(e) => handleContentChange(e.target.value)}
-                    spellCheck={false}
+                    editable={isEditingFileContent}
+                    onChange={handleContentChange}
                   />
                 )}
               </div>
@@ -1049,6 +1294,7 @@ export function SkillFileEditor({
                     )}
                   </span>
                   <span>UTF-8</span>
+                  <span>{currentFile?.mimeType || currentLanguageName}</span>
                   {isModified(selectedFile) && (
                     <span style={{ color: "hsl(var(--primary))" }}>
                       {t("skill.unsavedFile", "Unsaved")}
