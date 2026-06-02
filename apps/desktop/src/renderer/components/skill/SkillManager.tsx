@@ -50,6 +50,7 @@ import type {
 } from "@prompthub/shared/types";
 import { updateSkillTags, type SkillBatchTagMode } from "./batch-utils";
 import { filterVisibleSkills } from "../../services/skill-filter";
+import { buildMySkillSourceBadges } from "../../services/skill-source-badges";
 import { getRuntimeCapabilities } from "../../runtime";
 import { useSkillStoreRemoteSync } from "./store-remote-sync";
 
@@ -68,11 +69,11 @@ const SKILL_GALLERY_COLUMNS: SkillGalleryColumnMode[] = [
   "8",
 ];
 const LOCAL_SKILL_SCAN_TIMEOUT_MS = 30_000;
+const ALL_SKILL_SOURCE_FILTER = "all";
 const SKILL_VIEW_TRANSITION_CLASS =
   "h-full min-h-0 animate-in fade-in slide-in-from-right-3 duration-smooth";
 
-interface SkillViewTransitionProps
-  extends React.HTMLAttributes<HTMLDivElement> {
+interface SkillViewTransitionProps extends React.HTMLAttributes<HTMLDivElement> {
   viewKey: string;
 }
 
@@ -225,6 +226,15 @@ function mergeDeleteDistributionSummaries(
   );
 }
 
+function getPrimarySkillSourceBadge(
+  skill: Skill,
+  t: ReturnType<typeof useTranslation>["t"],
+) {
+  return buildMySkillSourceBadges(skill, t).find(
+    (badge) => !badge.key.startsWith("source-branch-"),
+  );
+}
+
 export function SkillManager() {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -357,9 +367,13 @@ export function SkillManager() {
     selectSkill(null);
   };
 
+  const [sourceFilterKey, setSourceFilterKey] = useState(
+    ALL_SKILL_SOURCE_FILTER,
+  );
+
   // Get filtered skills - filter directly in useMemo instead of using store function
   // 直接在 useMemo 中过滤，而不是使用 store 函数（避免函数引用作为依赖）
-  const filteredSkills = useMemo(() => {
+  const baseFilteredSkills = useMemo(() => {
     return filterVisibleSkills({
       deployedSkillNames,
       filterTags: skillFilterTags,
@@ -376,6 +390,73 @@ export function SkillManager() {
     searchQuery,
     skills,
   ]);
+
+  const sourceFilterEntries = useMemo(() => {
+    const entries = new Map<string, { label: string; count: number }>();
+
+    for (const skill of baseFilteredSkills) {
+      const badge = getPrimarySkillSourceBadge(skill, t);
+      if (!badge) {
+        continue;
+      }
+
+      const current = entries.get(badge.key);
+      entries.set(badge.key, {
+        label: String(badge.label),
+        count: (current?.count ?? 0) + 1,
+      });
+    }
+
+    return Array.from(entries.entries())
+      .map(([value, entry]) => ({ value, ...entry }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }, [baseFilteredSkills, t]);
+
+  const hasActiveSourceFilter = sourceFilterKey !== ALL_SKILL_SOURCE_FILTER;
+  const activeSourceFilterKey = sourceFilterEntries.some(
+    (entry) => entry.value === sourceFilterKey,
+  )
+    ? sourceFilterKey
+    : ALL_SKILL_SOURCE_FILTER;
+
+  const sourceFilterOptions = useMemo<SelectOption[]>(
+    () => [
+      {
+        value: ALL_SKILL_SOURCE_FILTER,
+        label: (
+          <span className="flex w-full items-center justify-between gap-2">
+            <span>{t("skill.allSources", "All Sources")}</span>
+            <span className="text-xs text-muted-foreground">
+              {baseFilteredSkills.length}
+            </span>
+          </span>
+        ),
+        labelText: t("skill.allSources", "All Sources"),
+      },
+      ...sourceFilterEntries.map((entry) => ({
+        value: entry.value,
+        label: (
+          <span className="flex w-full items-center justify-between gap-2">
+            <span className="truncate">{entry.label}</span>
+            <span className="text-xs text-muted-foreground">{entry.count}</span>
+          </span>
+        ),
+        labelText: entry.label,
+      })),
+    ],
+    [baseFilteredSkills.length, sourceFilterEntries, t],
+  );
+
+  const filteredSkills = useMemo(() => {
+    if (activeSourceFilterKey === ALL_SKILL_SOURCE_FILTER) {
+      return baseFilteredSkills;
+    }
+
+    return baseFilteredSkills.filter(
+      (skill) =>
+        getPrimarySkillSourceBadge(skill, t)?.key === activeSourceFilterKey,
+    );
+  }, [activeSourceFilterKey, baseFilteredSkills, t]);
 
   // Quick install state
   // 快速安装状态
@@ -569,7 +650,7 @@ export function SkillManager() {
     const result = await importScannedSkills(skillsToImport, userTagsByPath);
     // Refresh deployed status after import
     if (runtimeCapabilities.skillDistribution) {
-      await loadDeployedStatus();
+      await loadDeployedStatus({ force: true });
     }
     return result.importedCount;
   };
@@ -602,7 +683,7 @@ export function SkillManager() {
       cancelIdleCallback?: (handle: number) => void;
     };
 
-    void loadSkills().then(() => {
+    void loadSkills({ preferCache: true }).then(() => {
       if (disposed) return;
 
       if (!runtimeCapabilities.skillDistribution) {
@@ -643,8 +724,18 @@ export function SkillManager() {
     effectiveStoreView,
     pageSize,
     searchQuery,
+    sourceFilterKey,
     skillFilterTags,
   ]);
+
+  useEffect(() => {
+    if (
+      sourceFilterKey !== ALL_SKILL_SOURCE_FILTER &&
+      activeSourceFilterKey === ALL_SKILL_SOURCE_FILTER
+    ) {
+      setSourceFilterKey(ALL_SKILL_SOURCE_FILTER);
+    }
+  }, [activeSourceFilterKey, sourceFilterKey]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -733,7 +824,7 @@ export function SkillManager() {
             onPrimaryAction={() => selectSkill(null)}
             secondaryActionLabel={t("common.retry", "Retry")}
             onSecondaryAction={() => {
-              void loadSkills().then(() => loadDeployedStatus());
+              void loadSkills().then(() => loadDeployedStatus({ force: true }));
             }}
           >
             <SkillFullDetailPage />
@@ -1238,7 +1329,7 @@ export function SkillManager() {
                     try {
                       await loadSkills();
                       if (runtimeCapabilities.skillDistribution) {
-                        await loadDeployedStatus();
+                        await loadDeployedStatus({ force: true });
                       }
                       showToast(
                         t(
@@ -1304,6 +1395,18 @@ export function SkillManager() {
                     </button>
                   );
                 })}
+                <Select
+                  ariaLabel={t("skill.sourceFilterLabel", "Skill source")}
+                  value={activeSourceFilterKey}
+                  onChange={(value) => setSourceFilterKey(value)}
+                  options={sourceFilterOptions}
+                  className="min-w-[13rem] flex-1 sm:flex-none"
+                  triggerClassName={`h-9 w-full rounded-xl border px-3 text-sm font-medium shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-primary/30 flex items-center justify-between gap-2 ${
+                    hasActiveSourceFilter
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-border app-wallpaper-surface text-muted-foreground hover:border-primary/25 hover:bg-accent hover:text-foreground"
+                  }`}
+                />
               </div>
             ) : null}
 
@@ -1582,7 +1685,7 @@ export function SkillManager() {
             onClose={() => setShowBatchDeployDialog(false)}
             onComplete={async () => {
               if (runtimeCapabilities.skillDistribution) {
-                await loadDeployedStatus();
+                await loadDeployedStatus({ force: true });
               }
             }}
           />

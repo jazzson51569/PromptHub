@@ -21,3 +21,7 @@
 - [x] 为 built-in agent 引入完整 override 配置模型（root + relative paths）
 - [x] 统一 renderer / main process 对 effective agent config 的派生逻辑
 - [x] 将 Skill Settings 中 built-in agent 配置升级为完整路径配置 UI
+- [x] 为项目 Skill 扫描结果补充复制/软链接/外部软链接标签，并在详情页分别展示快捷方式路径和源 Skill 路径
+- [x] 修复项目 Skill 普通复制安装被误标记为“外部安装”的 badge 判定
+- [x] 将项目 Skill 来源标签口径收敛为：copy 显示复制安装，非 PromptHub 管理的 symlink 显示外部安装
+- [x] 修复从 My Skills 复制安装到项目后，项目详情仍提示“导入到我的 Skill”的识别漏洞

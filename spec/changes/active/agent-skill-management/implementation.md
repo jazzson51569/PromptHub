@@ -44,6 +44,25 @@ Implemented.
   - open the local folder
   - uninstall an agent-local skill
   - install a My Skills entry into the selected agent via copy or symlink
+- Agent scans now preserve symlink target metadata from `scanLocalPreview`.
+  - Symlink installs whose target is outside PromptHub-managed storage show an `External install` badge.
+  - Agent Skill detail shows the current agent shortcut path and the resolved source Skill path as separate right-side source cards for symlink installs.
+- Cherry Studio Agent Skill scans now read platform metadata from `Data/agent.db` or `Data/agents.db`.
+  - Rows with `source='builtin'`, `builtin`, or `is_builtin` are exposed as `isPlatformBuiltin`.
+  - Built-in platform Skills show a `Built-in` badge in the list and detail header.
+  - Built-in platform Skills that are not matched to My Skills still show `External install`; built-in is a platform protection label, not a PromptHub installation source.
+  - Built-in platform Skills cannot be uninstalled from the Agent Skill UI; the existing Cherry Studio DB-backed uninstall guard remains the main-process safety net.
+- Agent Skill install-source labels now distinguish PromptHub-managed installs from external folders.
+  - PromptHub-managed copy/symlink installs keep the localized `Copy install` / `Symlink install` badges.
+  - Agent-local folders that cannot be matched to My Skills, plus symlinks whose target is not PromptHub-managed, show `External install`.
+- Agent Skill status now uses the shared scan-status matrix helper also used by Project Skills.
+  - Managed identity matches by scanned local path, symlink target path, or directory fingerprint.
+  - Display name is no longer used as a managed identity fallback, so same-name Skills from different sources stay separate.
+  - Unmatched copied Agent folders show `External install`; only copies matched to My Skills by stable path, symlink target, or directory fingerprint show `Copy install`.
+- Agent Skill header stat badges now act as list filters.
+  - Users can filter the selected Agent by all Skills, managed Skills, unmanaged Skills, PromptHub-managed copy installs, and PromptHub-managed symlink installs.
+  - External installs are not counted as PromptHub copy/symlink installs, so the header numbers match the list badges.
+  - Added `agentStatsUnmanaged` localization across all desktop locales.
 
 ## Verification
 
@@ -87,3 +106,27 @@ Implemented.
   - Result: failed with 14 failures outside the Agent Skills change path.
   - Failing areas observed: create-skill modal timeout, project distribution/detail timeouts, skill i18n smoke timeout, custom store empty state assertion, skill filter/stats deployed counts, platform sync expectation fields, and one skill DB versioning migration test.
   - The new Agent Skills tests passed during the full run.
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx --testNamePattern "external symlink|agent skill browser"`
+  - Covers external symlink badges and opening the symlink source target from Agent Skill detail.
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx tests/unit/components/skill-projects-view.test.tsx tests/unit/main/skill-installer.test.ts --testNamePattern "source-target action|distinguishes copy from symlink"`
+  - Covers separate shortcut/source cards for Agent and Project symlink details and confirms platform scans preserve `symlinkTargetPath`.
+- Passed: `pnpm --filter @prompthub/desktop typecheck`
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/skill-installer.test.ts --testNamePattern "Cherry Studio built-in scanned|uninstalls Cherry Studio scanned"`
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx --testNamePattern "Cherry Studio built-in"`
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/cherry-studio-skill-platform.test.ts --testNamePattern "built-in|uninstalls current Cherry Studio"`
+- Passed: `pnpm --filter @prompthub/desktop typecheck`
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx tests/unit/components/skill-projects-view.test.tsx`
+  - 2 files passed
+  - 34 tests passed
+  - Existing React `act(...)` warnings still appear in the Agent detail test path, but all assertions pass.
+- Passed: `pnpm --filter @prompthub/desktop typecheck`
+- Passed: JSON parse validation for all desktop locales (`en`, `zh`, `zh-TW`, `ja`, `fr`, `de`, `es`).
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx`
+  - 1 file passed
+  - 13 tests passed
+  - Covers clicking the managed, unmanaged, copy, and all stat filters.
+- Passed: `pnpm --filter @prompthub/desktop typecheck`
+- Passed: `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/skill-scan-status.test.ts tests/unit/components/skill-agents-view.test.tsx tests/unit/components/skill-projects-view.test.tsx`
+  - 3 files passed
+  - 46 tests passed
+  - Covers the shared lifecycle matrix, same-name identity separation, Agent/Project unmanaged copy labels, Agent status labels, and Project status labels.

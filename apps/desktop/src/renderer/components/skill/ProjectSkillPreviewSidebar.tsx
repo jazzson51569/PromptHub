@@ -23,6 +23,7 @@ interface ProjectSkillPreviewSidebarProps {
   onRemoveFromProject?: () => void | Promise<void>;
   selectedSkill: Skill;
   sourcePath: string;
+  symlinkTargetPath?: string;
   t: TFunction;
 }
 
@@ -39,11 +40,16 @@ export function ProjectSkillPreviewSidebar({
   onRemoveFromProject,
   selectedSkill,
   sourcePath,
+  symlinkTargetPath,
   t,
 }: ProjectSkillPreviewSidebarProps) {
   const [selectedTargets, setSelectedTargets] = useState<Set<string>>(
     () => new Set(deployTargets),
   );
+  const showSymlinkTarget = Boolean(symlinkTargetPath);
+  const sourceTitle = showSymlinkTarget
+    ? t("skill.openAgentShortcut", "Open agent shortcut")
+    : t("skill.openLocalSource", "Open Local Skill Folder");
 
   const sortedTargets = useMemo(
     () => Array.from(new Set(deployTargets.filter((entry) => entry.trim().length > 0))),
@@ -216,7 +222,7 @@ export function ProjectSkillPreviewSidebar({
         <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em]">
           {t("skill.source", "Source")}
         </h3>
-        <div className="app-wallpaper-panel rounded-2xl border border-border p-5">
+        <div className="app-wallpaper-panel rounded-2xl border border-border p-5 space-y-3">
           <button
             type="button"
             onClick={() => void window.electron?.openPath?.(sourcePath)}
@@ -226,13 +232,36 @@ export function ProjectSkillPreviewSidebar({
             <FolderOpenIcon className="h-5 w-5 shrink-0 text-primary" />
             <div className="min-w-0">
               <div className="text-sm font-semibold text-foreground">
-                {t("skill.openLocalSource", "Open Local Skill Folder")}
+                {sourceTitle}
               </div>
               <div className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
                 {sourcePath}
               </div>
             </div>
           </button>
+          {showSymlinkTarget ? (
+            <button
+              type="button"
+              onClick={() =>
+                void window.electron?.openPath?.(symlinkTargetPath ?? "")
+              }
+              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-accent/60 px-4 py-4 text-left transition-colors hover:bg-accent"
+              title={symlinkTargetPath}
+            >
+              <FolderOpenIcon className="h-5 w-5 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground">
+                  {t(
+                    "skill.openSourceSkillFolder",
+                    "Open source Skill folder",
+                  )}
+                </div>
+                <div className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
+                  {symlinkTargetPath}
+                </div>
+              </div>
+            </button>
+          ) : null}
         </div>
       </section>
     </div>

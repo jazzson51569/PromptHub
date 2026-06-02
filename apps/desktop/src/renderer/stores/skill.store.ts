@@ -77,6 +77,10 @@ const TRANSLATION_CACHE_EVICT_COUNT = 50;
 const TRANSLATION_CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
 const REMOTE_CONTENT_CONCURRENCY = 6;
 const REMOTE_REPO_SYNC_CONCURRENCY = 6;
+const DEPLOYED_STATUS_CACHE_TTL_MS = 30_000;
+
+let deployedStatusRefreshPromise: Promise<void> | null = null;
+let deployedStatusLoadedAt = 0;
 
 interface ParsedGitHubSkillLocation {
   owner: string;
@@ -346,6 +350,89 @@ function findRegistrySkillCandidateByKey(
       ),
     ) || null
   );
+}
+
+function deriveGitHubSkillContentUrl(
+  sourceUrl?: string,
+  contentUrl?: string,
+): string | undefined {
+  if (contentUrl?.trim()) {
+    return contentUrl;
+  }
+
+  const location = parseGitHubSkillLocation(sourceUrl, contentUrl);
+  if (!location?.directoryPath) {
+    return undefined;
+  }
+
+  return `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${location.branch}/${location.directoryPath}/SKILL.md`;
+}
+
+function getInstalledSkillSourceCandidateKeys(skill: Skill): string[] {
+  return [skill.source_id, skill.content_url, skill.source_url].filter(
+    (value): value is string =>
+      typeof value === "string" && value.trim().length > 0,
+  );
+}
+
+function buildInstalledSkillSourceCandidate(
+  skill: Skill,
+): RegistrySkill | null {
+  const contentUrl = deriveGitHubSkillContentUrl(
+    skill.source_url,
+    skill.content_url,
+  );
+  const sourceUrl = skill.source_url?.trim();
+  if (!sourceUrl && !contentUrl) {
+    return null;
+  }
+
+  return {
+    slug: skill.registry_slug || skill.logical_name || skill.name,
+    name: skill.name,
+    install_name: skill.name,
+    source_id:
+      skill.source_id ||
+      buildSkillSourceId({
+        sourceType: "installed-source",
+        sourceUrl,
+        branch: skill.source_branch,
+        directory: skill.source_directory,
+        skillPath: skill.canonical_skill_path || contentUrl,
+      }),
+    source_label: skill.source_label,
+    source_branch: skill.source_branch,
+    source_directory: skill.source_directory,
+    canonical_skill_path: skill.canonical_skill_path,
+    directory_fingerprint: skill.directory_fingerprint,
+    description: skill.description || "",
+    category: skill.category || "general",
+    icon_url: skill.icon_url,
+    icon_emoji: skill.icon_emoji,
+    icon_background: skill.icon_background,
+    author: skill.author || "Unknown",
+    source_url: sourceUrl || contentUrl || "",
+    tags: skill.original_tags || skill.tags || [],
+    version: "source",
+    content: skill.content || skill.instructions || "",
+    content_url: contentUrl,
+    prerequisites: skill.prerequisites,
+    compatibility: skill.compatibility,
+  };
+}
+
+function findInstalledSkillSourceCandidate(
+  state: SkillState,
+  skill: Skill,
+): RegistrySkill | null {
+  for (const key of getInstalledSkillSourceCandidateKeys(skill)) {
+    const candidate = findRegistrySkillCandidateByKey(state, key);
+    if (candidate) {
+      return candidate;
+    }
+  }
+
+  return buildInstalledSkillSourceCandidate(skill);
 }
 
 function ensureRegistrySkillSourceId(skill: RegistrySkill): RegistrySkill {
@@ -695,7 +782,7 @@ interface SkillState {
   >;
 
   // Actions
-  loadSkills: () => Promise<void>;
+  loadSkills: (options?: { preferCache?: boolean }) => Promise<void>;
   selectSkill: (id: string | null) => void;
   createSkill: (data: CreateSkillParams) => Promise<Skill | null>;
   updateSkill: (id: string, data: UpdateSkillParams) => Promise<Skill | null>;
@@ -766,8 +853,15 @@ interface SkillState {
   getRegistrySkillUpdateStatus: (
     skill: RegistrySkill,
   ) => Promise<RegistrySkillUpdateCheck>;
+  getInstalledSkillSourceUpdateStatus: (
+    skillId: string,
+  ) => Promise<RegistrySkillUpdateCheck | null>;
   updateRegistrySkill: (
     sourceId: string,
+    options?: { overwriteLocalChanges?: boolean },
+  ) => Promise<RegistrySkillUpdateResult | null>;
+  updateInstalledSkillFromSource: (
+    skillId: string,
     options?: { overwriteLocalChanges?: boolean },
   ) => Promise<RegistrySkillUpdateResult | null>;
   installRegistrySkill: (skill: RegistrySkill) => Promise<Skill | null>;
@@ -800,7 +894,7 @@ interface SkillState {
   // Deployed tracking
   // 已分发到平台的技能名称集合
   deployedSkillNames: Set<string>;
-  loadDeployedStatus: () => Promise<void>;
+  loadDeployedStatus: (options?: { force?: boolean }) => Promise<void>;
 
   // Translation cache (with TTL + size limit)
   // 翻译缓存（带 TTL + 大小限制）
@@ -817,6 +911,68 @@ interface SkillState {
   ) => TranslationLookup;
   getTranslation: (cacheKey: string) => string | null;
   clearTranslation: (cacheKey: string) => void;
+}
+
+async function applyRegistrySkillUpdateToInstalledSkill(
+  installedSkill: Skill,
+  regSkill: RegistrySkill,
+  check: RegistrySkillUpdateCheck,
+  options: {
+    notePrefix: string;
+    markAsBuiltin: boolean;
+    updateSkill: SkillState["updateSkill"];
+  },
+): Promise<Skill | null> {
+  await window.api.skill.versionCreate(
+    installedSkill.id,
+    `${options.notePrefix}: ${installedSkill.version || "unknown"} -> ${regSkill.version}`,
+  );
+  scheduleAllSaveSync("skill:create-version");
+
+  const now = Date.now();
+  const updatedSkill = await options.updateSkill(installedSkill.id, {
+    description: regSkill.description,
+    instructions: check.remoteContent,
+    content: check.remoteContent,
+    version: regSkill.version,
+    author: regSkill.author,
+    source_url: regSkill.source_url,
+    source_id: regSkill.source_id,
+    source_label: regSkill.source_label,
+    source_branch: regSkill.source_branch,
+    source_directory: regSkill.source_directory,
+    canonical_skill_path: regSkill.canonical_skill_path,
+    icon_url: regSkill.icon_url,
+    icon_emoji: regSkill.icon_emoji,
+    icon_background: regSkill.icon_background,
+    category: regSkill.category,
+    is_builtin: options.markAsBuiltin ? true : installedSkill.is_builtin,
+    registry_slug: regSkill.slug,
+    directory_fingerprint: regSkill.directory_fingerprint,
+    content_url: regSkill.content_url,
+    original_tags: regSkill.tags,
+    prerequisites: regSkill.prerequisites,
+    compatibility: regSkill.compatibility,
+    installed_content_hash: check.remoteHash,
+    installed_version: regSkill.version,
+    updated_from_store_at: now,
+  });
+
+  if (!updatedSkill) {
+    return null;
+  }
+
+  if (isLocalRegistrySkill(regSkill)) {
+    await syncLocalRegistrySkillRepo(installedSkill.id, regSkill);
+  } else {
+    await syncRemoteRegistrySkillRepo(
+      installedSkill.id,
+      regSkill,
+      check.remoteContent,
+    );
+  }
+
+  return updatedSkill;
 }
 
 export const useSkillStore = create<SkillState>()(
@@ -849,8 +1005,13 @@ export const useSkillStore = create<SkillState>()(
       selectedStoreSourceId: "official",
       remoteStoreEntries: {},
 
-      loadSkills: async () => {
-        set({ isLoading: true, error: null });
+      loadSkills: async (options) => {
+        const hasCachedSkills = get().skills.length > 0;
+        if (!options?.preferCache || !hasCachedSkills) {
+          set({ isLoading: true, error: null });
+        } else {
+          set({ error: null });
+        }
         try {
           const skills = normalizeSkills(await window.api.skill.getAll());
           set({ skills, isLoading: false });
@@ -860,22 +1021,46 @@ export const useSkillStore = create<SkillState>()(
         }
       },
 
-      loadDeployedStatus: async () => {
-        const { skills } = get();
-        const deployed = new Set<string>();
-        try {
-          const skillIds = skills.map((s) => s.id);
-          const results =
-            await window.api.skill.getMdInstallStatusBatch(skillIds);
-          for (const [skillId, status] of Object.entries(results)) {
-            if (Object.values(status).some(Boolean)) {
-              deployed.add(skillId);
-            }
-          }
-        } catch (error) {
-          console.warn("Failed to load deployed status:", error);
+      loadDeployedStatus: async (options) => {
+        if (!options?.force && deployedStatusRefreshPromise) {
+          return deployedStatusRefreshPromise;
         }
-        set({ deployedSkillNames: deployed });
+        if (
+          !options?.force &&
+          deployedStatusLoadedAt > 0 &&
+          Date.now() - deployedStatusLoadedAt < DEPLOYED_STATUS_CACHE_TTL_MS
+        ) {
+          return;
+        }
+
+        const { skills } = get();
+        const run = async () => {
+          const deployed = new Set<string>();
+          try {
+            const skillIds = skills.map((s) => s.id);
+            if (skillIds.length === 0) {
+              set({ deployedSkillNames: deployed });
+              deployedStatusLoadedAt = Date.now();
+              return;
+            }
+            const results =
+              await window.api.skill.getMdInstallStatusBatch(skillIds);
+            for (const [skillId, status] of Object.entries(results)) {
+              if (Object.values(status).some(Boolean)) {
+                deployed.add(skillId);
+              }
+            }
+            deployedStatusLoadedAt = Date.now();
+          } catch (error) {
+            console.warn("Failed to load deployed status:", error);
+          }
+          set({ deployedSkillNames: deployed });
+        };
+
+        deployedStatusRefreshPromise = run().finally(() => {
+          deployedStatusRefreshPromise = null;
+        });
+        return deployedStatusRefreshPromise;
       },
 
       selectSkill: (id) => {
@@ -1488,6 +1673,28 @@ export const useSkillStore = create<SkillState>()(
         );
       },
 
+      getInstalledSkillSourceUpdateStatus: async (skillId) => {
+        const installedSkill = get().skills.find((skill) => skill.id === skillId);
+        if (!installedSkill) {
+          return null;
+        }
+
+        const regSkill = findInstalledSkillSourceCandidate(
+          get(),
+          installedSkill,
+        );
+        if (!regSkill) {
+          return null;
+        }
+
+        const remoteContent = await resolveRegistrySkillContent(regSkill);
+        return getRegistrySkillUpdateStatus(
+          installedSkill,
+          regSkill,
+          remoteContent,
+        );
+      },
+
       updateRegistrySkill: async (sourceId, options) => {
         const regSkill = findRegistrySkillCandidateByKey(get(), sourceId);
         if (!regSkill) return null;
@@ -1506,54 +1713,53 @@ export const useSkillStore = create<SkillState>()(
           return { status: check.status, check };
         }
 
-        const installedSkill = check.installedSkill;
-        await window.api.skill.versionCreate(
-          installedSkill.id,
-          `Store update: ${installedSkill.version || "unknown"} -> ${regSkill.version}`,
+        const updatedSkill = await applyRegistrySkillUpdateToInstalledSkill(
+          check.installedSkill,
+          regSkill,
+          check,
+          {
+            notePrefix: "Store update",
+            markAsBuiltin: true,
+            updateSkill: get().updateSkill,
+          },
         );
-        scheduleAllSaveSync("skill:create-version");
-
-        const now = Date.now();
-        const updatedSkill = await get().updateSkill(installedSkill.id, {
-          description: regSkill.description,
-          instructions: check.remoteContent,
-          content: check.remoteContent,
-          version: regSkill.version,
-          author: regSkill.author,
-          source_url: regSkill.source_url,
-          source_id: regSkill.source_id,
-          source_label: regSkill.source_label,
-          source_branch: regSkill.source_branch,
-          source_directory: regSkill.source_directory,
-          canonical_skill_path: regSkill.canonical_skill_path,
-          icon_url: regSkill.icon_url,
-          icon_emoji: regSkill.icon_emoji,
-          icon_background: regSkill.icon_background,
-          category: regSkill.category,
-          is_builtin: true,
-          registry_slug: regSkill.slug,
-          directory_fingerprint: regSkill.directory_fingerprint,
-          content_url: regSkill.content_url,
-          original_tags: regSkill.tags,
-          prerequisites: regSkill.prerequisites,
-          compatibility: regSkill.compatibility,
-          installed_content_hash: check.remoteHash,
-          installed_version: regSkill.version,
-          updated_from_store_at: now,
-        });
-
         if (!updatedSkill) {
           return null;
         }
 
-        if (isLocalRegistrySkill(regSkill)) {
-          await syncLocalRegistrySkillRepo(installedSkill.id, regSkill);
-        } else {
-          await syncRemoteRegistrySkillRepo(
-            installedSkill.id,
-            regSkill,
-            check.remoteContent,
-          );
+        return { status: "updated", skill: updatedSkill, check };
+      },
+
+      updateInstalledSkillFromSource: async (skillId, options) => {
+        const check = await get().getInstalledSkillSourceUpdateStatus(skillId);
+        if (!check) {
+          return null;
+        }
+        if (!check.installedSkill) {
+          return { status: "not-installed", check };
+        }
+        if (check.status === "up-to-date") {
+          return { status: "up-to-date", check };
+        }
+        if (
+          (check.status === "conflict" || check.status === "local-modified") &&
+          !options?.overwriteLocalChanges
+        ) {
+          return { status: check.status, check };
+        }
+
+        const updatedSkill = await applyRegistrySkillUpdateToInstalledSkill(
+          check.installedSkill,
+          check.registrySkill,
+          check,
+          {
+            notePrefix: "Source update",
+            markAsBuiltin: false,
+            updateSkill: get().updateSkill,
+          },
+        );
+        if (!updatedSkill) {
+          return null;
         }
 
         return { status: "updated", skill: updatedSkill, check };

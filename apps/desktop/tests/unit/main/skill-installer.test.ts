@@ -183,6 +183,27 @@ describe("SkillInstaller.exportAsSkillMd", () => {
 });
 
 describe("SkillInstaller.fetchRemoteContent", () => {
+  function mockInstalledRemoteSources(
+    rows: Array<{ source_url: string | null; content_url: string | null }>,
+  ) {
+    const db = {
+      prepare: vi.fn(() => ({
+        all: vi.fn(() => rows),
+      })),
+    } as unknown;
+    vi.mocked(initDatabase).mockReturnValue(
+      db as ReturnType<typeof initDatabase>,
+    );
+    vi.mocked(readGithubTokenSetting).mockReturnValue(null);
+    return db;
+  }
+
+  const privateFetchOptions = {
+    allowPrivateNetwork: true,
+    allowInsecurePrivateNetworkHttp: true,
+    githubToken: null,
+  };
+
   it("reads the GitHub token without importing Electron-bound IPC modules", async () => {
     const db = { prepare: vi.fn() } as unknown;
     vi.mocked(initDatabase).mockReturnValue(
@@ -203,6 +224,169 @@ describe("SkillInstaller.fetchRemoteContent", () => {
       "https://api.github.com/repos/foo/bar/contents/SKILL.md",
       0,
       { githubToken: "ghp_FromDb" },
+    );
+  });
+
+  it("allows private network fetches for installed skill content URLs", async () => {
+    mockInstalledRemoteSources([
+      {
+        source_url: "http://192.168.1.20/team/skills",
+        content_url:
+          "http://192.168.1.20/team/skills/raw/branch/main/writer/SKILL.md",
+      },
+    ]);
+    const fetchSpy = vi
+      .spyOn(remoteInstaller, "fetchRemoteText")
+      .mockResolvedValue("ok");
+
+    const result = await SkillInstaller.fetchRemoteContent(
+      "http://192.168.1.20/team/skills/raw/branch/main/writer/SKILL.md",
+    );
+
+    expect(result).toBe("ok");
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.1.20/team/skills/raw/branch/main/writer/SKILL.md",
+      0,
+      privateFetchOptions,
+    );
+  });
+
+  it("allows private network fetches within an installed source URL path scope", async () => {
+    mockInstalledRemoteSources([
+      {
+        source_url: "http://192.168.1.20/team/skills/",
+        content_url: null,
+      },
+    ]);
+    const fetchSpy = vi
+      .spyOn(remoteInstaller, "fetchRemoteText")
+      .mockResolvedValue("ok");
+
+    await SkillInstaller.fetchRemoteContent(
+      "http://192.168.1.20/team/skills/raw/branch/main/assets/icon.png",
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.1.20/team/skills/raw/branch/main/assets/icon.png",
+      0,
+      privateFetchOptions,
+    );
+  });
+
+  it("allows private network byte fetches within an installed source URL path scope", async () => {
+    mockInstalledRemoteSources([
+      {
+        source_url: "http://192.168.1.20/team/skills",
+        content_url: null,
+      },
+    ]);
+    const fetchSpy = vi
+      .spyOn(remoteInstaller, "fetchRemoteBytes")
+      .mockResolvedValue(new Uint8Array([1, 2, 3]));
+
+    await SkillInstaller.fetchRemoteContentBytes(
+      "http://192.168.1.20/team/skills/raw/branch/main/assets/icon.png",
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.1.20/team/skills/raw/branch/main/assets/icon.png",
+      0,
+      privateFetchOptions,
+    );
+  });
+
+  it("does not allow arbitrary private network URLs outside installed skill sources", async () => {
+    mockInstalledRemoteSources([
+      {
+        source_url: "http://192.168.1.20/team/skills",
+        content_url:
+          "http://192.168.1.20/team/skills/raw/branch/main/writer/SKILL.md",
+      },
+    ]);
+    const fetchSpy = vi
+      .spyOn(remoteInstaller, "fetchRemoteText")
+      .mockResolvedValue("ok");
+
+    await SkillInstaller.fetchRemoteContent("http://192.168.1.99/admin/config");
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.1.99/admin/config",
+      0,
+      { githubToken: null },
+    );
+  });
+
+  it("does not allow same-origin sibling paths outside the installed source URL scope", async () => {
+    mockInstalledRemoteSources([
+      {
+        source_url: "http://192.168.1.20/team/skills",
+        content_url: null,
+      },
+    ]);
+    const fetchSpy = vi
+      .spyOn(remoteInstaller, "fetchRemoteText")
+      .mockResolvedValue("ok");
+
+    await SkillInstaller.fetchRemoteContent(
+      "http://192.168.1.20/team/skills-other/raw/SKILL.md",
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.1.20/team/skills-other/raw/SKILL.md",
+      0,
+      { githubToken: null },
+    );
+  });
+
+  it("does not allow different private origins even when the path matches", async () => {
+    mockInstalledRemoteSources([
+      {
+        source_url: "http://192.168.1.20:3000/team/skills",
+        content_url: null,
+      },
+    ]);
+    const fetchSpy = vi
+      .spyOn(remoteInstaller, "fetchRemoteText")
+      .mockResolvedValue("ok");
+
+    await SkillInstaller.fetchRemoteContent(
+      "http://192.168.1.20:3001/team/skills/raw/SKILL.md",
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.1.20:3001/team/skills/raw/SKILL.md",
+      0,
+      { githubToken: null },
+    );
+  });
+
+  it("falls back to the default SSRF policy when installed source lookup fails", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const db = {
+      prepare: vi.fn(() => {
+        throw new Error("settings unavailable");
+      }),
+    } as unknown;
+    vi.mocked(initDatabase).mockReturnValue(
+      db as ReturnType<typeof initDatabase>,
+    );
+    vi.mocked(readGithubTokenSetting).mockReturnValue(null);
+    const fetchSpy = vi
+      .spyOn(remoteInstaller, "fetchRemoteText")
+      .mockResolvedValue("ok");
+
+    await SkillInstaller.fetchRemoteContent(
+      "http://192.168.1.20/team/skills/raw/SKILL.md",
+    );
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://192.168.1.20/team/skills/raw/SKILL.md",
+      0,
+      { githubToken: null },
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Unable to load skill remote fetch settings, continuing unauthenticated:",
+      expect.any(Error),
     );
   });
 });
@@ -486,6 +670,7 @@ describe("SkillInstaller.scanPlatformSkills", () => {
         platformSkillPath: linkedSkillDir,
         localPath: linkedSkillDir,
         platforms: ["Claude Code"],
+        symlinkTargetPath: sourceSkillDir,
       }),
     );
     expect(
@@ -586,6 +771,61 @@ describe("SkillInstaller.scanPlatformSkills", () => {
       verifyDb.close();
     }
     expect(fsSync.existsSync(skillDir)).toBe(false);
+  });
+
+  it("marks Cherry Studio built-in scanned skills as platform built-ins", async () => {
+    const cherryRoot = path.join(tmpDir, "CherryStudio");
+    const cherrySkillsDir = path.join(cherryRoot, "Data", "Skills");
+    const skillDir = path.join(cherrySkillsDir, "find-skills");
+    const dbPath = path.join(cherryRoot, "Data", "agents.db");
+    await fs.mkdir(skillDir, { recursive: true });
+    await fs.writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: find-skills\ndescription: Built-in discovery\n---\n# Find",
+    );
+    await fs.mkdir(path.dirname(dbPath), { recursive: true });
+    const database = new Database(dbPath);
+    database.exec(`
+      CREATE TABLE skills (
+        id text PRIMARY KEY NOT NULL,
+        folder_name text NOT NULL,
+        source text NOT NULL
+      );
+      CREATE TABLE agents (
+        id text PRIMARY KEY NOT NULL,
+        accessible_paths text
+      );
+      CREATE TABLE agent_skills (
+        agent_id text NOT NULL,
+        skill_id text NOT NULL,
+        is_enabled integer DEFAULT false NOT NULL
+      );
+    `);
+    database.run(
+      "INSERT INTO skills (id, folder_name, source) VALUES (?, ?, ?)",
+      "skill-1",
+      "find-skills",
+      "builtin",
+    );
+    database.close();
+
+    vi.spyOn(skillInstallerUtils, "getPlatformRootDir").mockReturnValue(
+      cherryRoot,
+    );
+    vi.spyOn(skillInstallerUtils, "getPlatformSkillsDir").mockReturnValue(
+      cherrySkillsDir,
+    );
+
+    const result = await SkillInstaller.scanPlatformSkills("cherry-studio");
+
+    expect(result.scannedSkills).toHaveLength(1);
+    expect(result.scannedSkills[0]).toEqual(
+      expect.objectContaining({
+        name: "find-skills",
+        isPlatformBuiltin: true,
+        platformSkillPath: skillDir,
+      }),
+    );
   });
 });
 
@@ -1279,9 +1519,7 @@ describe("SkillInstaller.readLocalRepoFiles", () => {
     expect(skillMd?.isDirectory).toBe(false);
 
     // Check nested file
-    const utilsFile = files.find(
-      (f) => f.path === path.join("lib", "utils.ts"),
-    );
+    const utilsFile = files.find((f) => f.path === "lib/utils.ts");
     expect(utilsFile?.content).toBe("export const x = 1;");
   });
 
@@ -1319,6 +1557,58 @@ describe("SkillInstaller.readLocalRepoFileBuffersByPath", () => {
 });
 
 describe("SkillInstaller external repo by-path access", () => {
+  const previewCases: Array<{
+    relativePath: string;
+    mimeType: string;
+    previewKind: "image" | "audio" | "video" | "pdf";
+  }> = [
+    {
+      relativePath: "assets/logo.svg",
+      mimeType: "image/svg+xml",
+      previewKind: "image",
+    },
+    {
+      relativePath: "assets/logo.png",
+      mimeType: "image/png",
+      previewKind: "image",
+    },
+    {
+      relativePath: "assets/photo.jpg",
+      mimeType: "image/jpeg",
+      previewKind: "image",
+    },
+    {
+      relativePath: "assets/cover.webp",
+      mimeType: "image/webp",
+      previewKind: "image",
+    },
+    {
+      relativePath: "media/intro.mp3",
+      mimeType: "audio/mpeg",
+      previewKind: "audio",
+    },
+    {
+      relativePath: "media/intro.wav",
+      mimeType: "audio/wav",
+      previewKind: "audio",
+    },
+    {
+      relativePath: "media/demo.mp4",
+      mimeType: "video/mp4",
+      previewKind: "video",
+    },
+    {
+      relativePath: "media/demo.webm",
+      mimeType: "video/webm",
+      previewKind: "video",
+    },
+    {
+      relativePath: "docs/manual.pdf",
+      mimeType: "application/pdf",
+      previewKind: "pdf",
+    },
+  ];
+
   it("lists and edits files under an external project skill root", async () => {
     const repoPath = path.join(tmpDir, "project", ".claude", "skills", "novel");
     await fs.mkdir(repoPath, { recursive: true });
@@ -1402,6 +1692,74 @@ describe("SkillInstaller external repo by-path access", () => {
       "notes.txt",
     );
     expect(note?.content).toBe("hello file-base skill");
+  });
+
+  it("returns preview data URLs for supported resource files without changing bulk reads", async () => {
+    const repoPath = path.join(
+      tmpDir,
+      "project",
+      ".claude",
+      "skills",
+      "asset-skill",
+    );
+    await fs.mkdir(repoPath, { recursive: true });
+    await fs.writeFile(path.join(repoPath, "SKILL.md"), "# Asset Skill\n");
+    for (const testCase of previewCases) {
+      const fullPath = path.join(repoPath, testCase.relativePath);
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, Buffer.from([1, 2, 3, 4]));
+    }
+
+    const all = await SkillInstaller.readLocalRepoFilesByPath(repoPath);
+    for (const testCase of previewCases) {
+      const single = await SkillInstaller.readLocalRepoFileByPath(
+        repoPath,
+        testCase.relativePath,
+      );
+      const bulkFile = all.find((file) => file.path === testCase.relativePath);
+
+      expect(single?.encoding).toBe("data-url");
+      expect(single?.mimeType).toBe(testCase.mimeType);
+      expect(single?.previewKind).toBe(testCase.previewKind);
+      expect(single?.content).toMatch(
+        new RegExp(`^data:${testCase.mimeType.replace("+", "\\+")};base64,`),
+      );
+      expect(bulkFile?.content).toBe("[binary file]");
+      expect(bulkFile?.encoding).toBe("placeholder");
+    }
+  });
+
+  it("keeps unsupported and oversized binary files as non-editable placeholders", async () => {
+    const repoPath = path.join(tmpDir, "project", "skills", "binary-skill");
+    await fs.mkdir(path.join(repoPath, "assets"), { recursive: true });
+    await fs.writeFile(path.join(repoPath, "SKILL.md"), "# Binary Skill\n");
+    await fs.writeFile(path.join(repoPath, "assets", "archive.zip"), "zip");
+    await fs.writeFile(
+      path.join(repoPath, "assets", "huge.png"),
+      Buffer.alloc(5 * 1_048_576 + 1),
+    );
+
+    const unsupported = await SkillInstaller.readLocalRepoFileByPath(
+      repoPath,
+      "assets/archive.zip",
+    );
+    const oversized = await SkillInstaller.readLocalRepoFileByPath(
+      repoPath,
+      "assets/huge.png",
+    );
+
+    expect(unsupported).toMatchObject({
+      content: "[binary file]",
+      encoding: "placeholder",
+    });
+    expect(unsupported?.mimeType).toBeUndefined();
+    expect(unsupported?.previewKind).toBeUndefined();
+    expect(oversized).toMatchObject({
+      content: "[file too large]",
+      encoding: "placeholder",
+      mimeType: "image/png",
+      previewKind: "image",
+    });
   });
 
   it("still rejects traversal outside an external project skill root", async () => {
@@ -2130,8 +2488,11 @@ describe("SkillInstaller.scanLocalPreview", () => {
         name: "writer",
         description: "Project symlink skill",
         filePath: path.join(projectSkillPath, "SKILL.md"),
+        installMode: "symlink",
+        isPromptHubManagedLink: false,
         localPath: projectSkillPath,
         platforms: ["Custom"],
+        symlinkTargetPath: sourceDir,
       }),
     );
   });

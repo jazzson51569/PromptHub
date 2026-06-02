@@ -76,7 +76,7 @@ function sanitizeString(
 }
 
 function sanitizeTags(primary: unknown, fallback: unknown): string[] {
-const source = Array.isArray(primary)
+  const source = Array.isArray(primary)
     ? primary
     : Array.isArray(fallback)
       ? fallback
@@ -84,7 +84,8 @@ const source = Array.isArray(primary)
 
   return source
     .filter(
-      (item): item is string => typeof item === "string" && item.trim().length > 0,
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 0,
     )
     .map((item) => item.trim().slice(0, 128));
 }
@@ -99,7 +100,8 @@ function sanitizeStringList(
 
   const items = value
     .filter(
-      (item): item is string => typeof item === "string" && item.trim().length > 0,
+      (item): item is string =>
+        typeof item === "string" && item.trim().length > 0,
     )
     .map((item) => item.trim().slice(0, maxLength));
 
@@ -249,6 +251,7 @@ const INTERNAL_REPO_DIRS = new Set([".git", ".prompthub"]);
 const MAX_WALK_DEPTH = 5;
 const MAX_WALK_FILES = 500;
 const MAX_FILE_SIZE_BYTES = 1_048_576;
+const MAX_PREVIEW_FILE_SIZE_BYTES = 5 * 1_048_576;
 const TEXT_EXTENSIONS = new Set([
   ".md",
   ".py",
@@ -280,6 +283,30 @@ const TEXT_EXTENSIONS = new Set([
   ".hpp",
   ".cs",
   ".rs",
+]);
+const PREVIEW_MIME_TYPES = new Map<
+  string,
+  { mimeType: string; previewKind: "image" | "audio" | "video" | "pdf" }
+>([
+  [".svg", { mimeType: "image/svg+xml", previewKind: "image" }],
+  [".png", { mimeType: "image/png", previewKind: "image" }],
+  [".jpg", { mimeType: "image/jpeg", previewKind: "image" }],
+  [".jpeg", { mimeType: "image/jpeg", previewKind: "image" }],
+  [".gif", { mimeType: "image/gif", previewKind: "image" }],
+  [".webp", { mimeType: "image/webp", previewKind: "image" }],
+  [".avif", { mimeType: "image/avif", previewKind: "image" }],
+  [".bmp", { mimeType: "image/bmp", previewKind: "image" }],
+  [".ico", { mimeType: "image/x-icon", previewKind: "image" }],
+  [".mp3", { mimeType: "audio/mpeg", previewKind: "audio" }],
+  [".wav", { mimeType: "audio/wav", previewKind: "audio" }],
+  [".ogg", { mimeType: "audio/ogg", previewKind: "audio" }],
+  [".m4a", { mimeType: "audio/mp4", previewKind: "audio" }],
+  [".flac", { mimeType: "audio/flac", previewKind: "audio" }],
+  [".mp4", { mimeType: "video/mp4", previewKind: "video" }],
+  [".webm", { mimeType: "video/webm", previewKind: "video" }],
+  [".ogv", { mimeType: "video/ogg", previewKind: "video" }],
+  [".mov", { mimeType: "video/quicktime", previewKind: "video" }],
+  [".pdf", { mimeType: "application/pdf", previewKind: "pdf" }],
 ]);
 
 async function fetchRemoteContent(
@@ -398,7 +425,10 @@ async function readManifest(skillDir: string): Promise<SkillManifest> {
 
 async function saveRepo(skillName: string, sourceDir: string): Promise<string> {
   const managedSkillsDir = getSkillsDir();
-  const destinationDir = path.join(managedSkillsDir, validateSkillName(skillName));
+  const destinationDir = path.join(
+    managedSkillsDir,
+    validateSkillName(skillName),
+  );
   await fs.mkdir(managedSkillsDir, { recursive: true });
 
   if (await fileExists(destinationDir)) {
@@ -438,9 +468,15 @@ async function copyRepoToPlatform(
   });
 }
 
-async function saveContent(skillName: string, content: string): Promise<string> {
+async function saveContent(
+  skillName: string,
+  content: string,
+): Promise<string> {
   const managedSkillsDir = getSkillsDir();
-  const destinationDir = path.join(managedSkillsDir, validateSkillName(skillName));
+  const destinationDir = path.join(
+    managedSkillsDir,
+    validateSkillName(skillName),
+  );
   await fs.mkdir(destinationDir, { recursive: true });
   await fs.writeFile(path.join(destinationDir, "SKILL.md"), content, "utf-8");
   return destinationDir;
@@ -478,9 +514,8 @@ async function installFromSkillContent(
   const localRepoPath = options?.repoSourceDir
     ? await saveRepo(normalizedName, options.repoSourceDir)
     : await saveContent(normalizedName, skillContent);
-  const directoryFingerprint = await computeRepoDirectoryFingerprintByPath(
-    localRepoPath,
-  );
+  const directoryFingerprint =
+    await computeRepoDirectoryFingerprintByPath(localRepoPath);
 
   return skillDb.create({
     name: normalizedName,
@@ -533,9 +568,14 @@ async function installFromGithub(
   const owner = matches[1];
   const repoName = matches[2];
   const installDir = path.join(getSkillsDir(), `${owner}-${repoName}`);
-  const relative = path.relative(path.resolve(getSkillsDir()), path.resolve(installDir));
+  const relative = path.relative(
+    path.resolve(getSkillsDir()),
+    path.resolve(installDir),
+  );
   if (relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Path traversal detected: installDir is outside skills directory");
+    throw new Error(
+      "Path traversal detected: installDir is outside skills directory",
+    );
   }
 
   try {
@@ -601,13 +641,16 @@ async function installFromGithub(
       protocol_type: "skill",
       source_url: sourceUrl,
       local_repo_path: skillDir,
-      directory_fingerprint: await computeRepoDirectoryFingerprintByPath(skillDir),
+      directory_fingerprint:
+        await computeRepoDirectoryFingerprintByPath(skillDir),
       is_favorite: false,
       tags: [],
       original_tags: manifest.tags || ["github"],
     }).id;
   } catch (error) {
-    await fs.rm(installDir, { recursive: true, force: true }).catch(() => undefined);
+    await fs
+      .rm(installDir, { recursive: true, force: true })
+      .catch(() => undefined);
     throw error;
   }
 }
@@ -619,7 +662,9 @@ async function resolveRepoBasePath(
   const skillsDir = getSkillsDir();
   const resolvedBasePath = path.resolve(absoluteBasePath);
   const resolvedSkillsDir = path.resolve(skillsDir);
-  const realSkillsDir = await fs.realpath(resolvedSkillsDir).catch(() => resolvedSkillsDir);
+  const realSkillsDir = await fs
+    .realpath(resolvedSkillsDir)
+    .catch(() => resolvedSkillsDir);
   const realResolvedBasePath = await fs
     .realpath(resolvedBasePath)
     .catch(() => resolvedBasePath);
@@ -640,8 +685,13 @@ async function resolveRepoBasePath(
     await fs.mkdir(resolvedBasePath, { recursive: true });
   }
 
-  const realBasePath = await fs.realpath(resolvedBasePath).catch(() => resolvedBasePath);
-  if (!options?.allowOutsideSkillsDir && !isPathWithin(realSkillsDir, realBasePath)) {
+  const realBasePath = await fs
+    .realpath(resolvedBasePath)
+    .catch(() => resolvedBasePath);
+  if (
+    !options?.allowOutsideSkillsDir &&
+    !isPathWithin(realSkillsDir, realBasePath)
+  ) {
     throw new Error("Managed repo path resolves outside skills directory");
   }
 
@@ -674,16 +724,40 @@ async function resolveRepoTargetPath(
   return { fullPath, realBasePath };
 }
 
-async function readFileContent(fullPath: string, fileName: string): Promise<string> {
+async function readFileContent(
+  fullPath: string,
+  fileName: string,
+  options?: { includePreviewData?: boolean },
+): Promise<
+  Pick<SkillLocalFileEntry, "content" | "mimeType" | "encoding" | "previewKind">
+> {
   const ext = path.extname(fileName).toLowerCase();
-  if (!TEXT_EXTENSIONS.has(ext)) {
-    return "[binary file]";
-  }
   const stat = await fs.stat(fullPath);
-  if (stat.size > MAX_FILE_SIZE_BYTES) {
-    return "[file too large]";
+  if (TEXT_EXTENSIONS.has(ext)) {
+    if (stat.size > MAX_FILE_SIZE_BYTES) {
+      return { content: "[file too large]", encoding: "placeholder" };
+    }
+    return { content: await fs.readFile(fullPath, "utf-8"), encoding: "text" };
   }
-  return fs.readFile(fullPath, "utf-8");
+
+  const previewType = PREVIEW_MIME_TYPES.get(ext);
+  if (options?.includePreviewData && previewType) {
+    if (stat.size > MAX_PREVIEW_FILE_SIZE_BYTES) {
+      return {
+        content: "[file too large]",
+        encoding: "placeholder",
+        ...previewType,
+      };
+    }
+    const data = await fs.readFile(fullPath);
+    return {
+      content: `data:${previewType.mimeType};base64,${data.toString("base64")}`,
+      encoding: "data-url",
+      ...previewType,
+    };
+  }
+
+  return { content: "[binary file]", encoding: "placeholder" };
 }
 
 async function readRepoFileBuffers(
@@ -843,7 +917,9 @@ async function collectSkillDirs(scanPath: string): Promise<string[]> {
   return skillDirs;
 }
 
-async function resolveSingleSkillDirFromRepo(repoRoot: string): Promise<string> {
+async function resolveSingleSkillDirFromRepo(
+  repoRoot: string,
+): Promise<string> {
   if (await fileExists(path.join(repoRoot, "SKILL.md"))) {
     return repoRoot;
   }
@@ -886,9 +962,17 @@ export interface CliSkillService {
     skillId: string,
     note?: string,
   ): Promise<import("@prompthub/shared/types").SkillVersion | null>;
-  deleteLocalFile(skillDb: SkillDB, skillId: string, relativePath: string): Promise<void>;
+  deleteLocalFile(
+    skillDb: SkillDB,
+    skillId: string,
+    relativePath: string,
+  ): Promise<void>;
   deleteRepoByPath(absolutePath: string): Promise<void>;
-  deleteVersion(skillDb: SkillDB, skillId: string, versionId: string): Promise<boolean>;
+  deleteVersion(
+    skillDb: SkillDB,
+    skillId: string,
+    versionId: string,
+  ): Promise<boolean>;
   detectInstalledPlatforms(): Promise<string[]>;
   exportAsJson(skill: import("@prompthub/shared/types").Skill): string;
   exportAsSkillMd(skill: import("@prompthub/shared/types").Skill): string;
@@ -906,7 +990,10 @@ export interface CliSkillService {
     platformId: string,
   ): Promise<void>;
   isManagedRepoPath(absolutePath: string): Promise<boolean>;
-  listLocalFiles(skillDb: SkillDB, skillId: string): Promise<SkillLocalFileTreeEntry[]>;
+  listLocalFiles(
+    skillDb: SkillDB,
+    skillId: string,
+  ): Promise<SkillLocalFileTreeEntry[]>;
   readCurrentFilesSnapshot(
     skillDb: SkillDB,
     skillId: string,
@@ -927,10 +1014,20 @@ export interface CliSkillService {
     skillId: string,
     filesSnapshot?: SkillFileSnapshot[],
   ): Promise<void>;
-  rollbackVersion(skillDb: SkillDB, skillId: string, version: number): Promise<import("@prompthub/shared/types").Skill | null>;
-  scanLocalPreview(customPaths?: string[], skillDb?: SkillDB): Promise<ScannedSkill[]>;
+  rollbackVersion(
+    skillDb: SkillDB,
+    skillId: string,
+    version: number,
+  ): Promise<import("@prompthub/shared/types").Skill | null>;
+  scanLocalPreview(
+    customPaths?: string[],
+    skillDb?: SkillDB,
+  ): Promise<ScannedSkill[]>;
   scanSafety(input: SkillSafetyScanInput): Promise<SkillSafetyReport>;
-  syncFromRepo(skillDb: SkillDB, skillId: string): Promise<import("@prompthub/shared/types").Skill | null>;
+  syncFromRepo(
+    skillDb: SkillDB,
+    skillId: string,
+  ): Promise<import("@prompthub/shared/types").Skill | null>;
   uninstallSkillMd(skillName: string, platformId: string): Promise<void>;
   writeLocalFile(
     skillDb: SkillDB,
@@ -966,7 +1063,10 @@ export function createCliSkillService(
     await fs.rm(path.resolve(absolutePath), { recursive: true, force: true });
   }
 
-  async function resolveSkill(skillDb: SkillDB, skillId: string): Promise<Skill> {
+  async function resolveSkill(
+    skillDb: SkillDB,
+    skillId: string,
+  ): Promise<Skill> {
     const skill = skillDb.getById(skillId) ?? skillDb.getByName(skillId);
     if (!skill) {
       throw new Error(`Skill not found: ${skillId}`);
@@ -1017,7 +1117,8 @@ export function createCliSkillService(
     }
 
     const saved = await saveContent(skill.name, content);
-    const directoryFingerprint = await computeRepoDirectoryFingerprintByPath(saved);
+    const directoryFingerprint =
+      await computeRepoDirectoryFingerprintByPath(saved);
     if (saved !== skill.local_repo_path) {
       skillDb.update(skill.id, {
         local_repo_path: saved,
@@ -1084,9 +1185,10 @@ export function createCliSkillService(
         if (isDirectory) {
           return { path: relativePath, content: "", isDirectory: true };
         }
+        const contentInfo = await readFileContent(fullPath, dirent.name);
         return {
           path: relativePath,
-          content: await readFileContent(fullPath, dirent.name),
+          ...contentInfo,
           isDirectory: false,
         };
       },
@@ -1110,9 +1212,16 @@ export function createCliSkillService(
     if (stat.isDirectory()) {
       return { path: relativePath, content: "", isDirectory: true };
     }
+    const contentInfo = await readFileContent(
+      fullPath,
+      path.basename(fullPath),
+      {
+        includePreviewData: true,
+      },
+    );
     return {
       path: relativePath,
-      content: await readFileContent(fullPath, path.basename(fullPath)),
+      ...contentInfo,
       isDirectory: false,
     };
   }
@@ -1222,7 +1331,10 @@ export function createCliSkillService(
     if (!targetVersion) {
       return null;
     }
-    const currentFilesSnapshot = await createLocalRepoSnapshot(skillDb, skill.id);
+    const currentFilesSnapshot = await createLocalRepoSnapshot(
+      skillDb,
+      skill.id,
+    );
     await skillDb.createVersion(
       skill.id,
       `Rollback before restoring v${version}`,
@@ -1270,9 +1382,8 @@ export function createCliSkillService(
     if (parsed?.frontmatter.tags !== undefined) {
       update.tags = parsed.frontmatter.tags;
     }
-    update.directory_fingerprint = await computeRepoDirectoryFingerprintByPath(
-      repoPath,
-    );
+    update.directory_fingerprint =
+      await computeRepoDirectoryFingerprintByPath(repoPath);
     return skillDb.update(skill.id, update);
   }
 
@@ -1289,17 +1400,26 @@ export function createCliSkillService(
     const canonicalRepoPath =
       (await getRepoPathForSkillName(skillDb, skillName)) ??
       (await saveContent(skillName, skillMdContent));
-    const skillDir = path.join(getPlatformSkillsDir(platform), validateSkillName(skillName));
+    const skillDir = path.join(
+      getPlatformSkillsDir(platform),
+      validateSkillName(skillName),
+    );
     await fs.mkdir(path.dirname(skillDir), { recursive: true });
     await copyRepoToPlatform(canonicalRepoPath, skillDir);
   }
 
-  async function uninstallSkillMd(skillName: string, platformId: string): Promise<void> {
+  async function uninstallSkillMd(
+    skillName: string,
+    platformId: string,
+  ): Promise<void> {
     const platform = SKILL_PLATFORMS.find((item) => item.id === platformId);
     if (!platform) {
       throw new Error(`Unknown platform: ${platformId}`);
     }
-    const skillDir = path.join(getPlatformSkillsDir(platform), validateSkillName(skillName));
+    const skillDir = path.join(
+      getPlatformSkillsDir(platform),
+      validateSkillName(skillName),
+    );
     if (await fileExists(skillDir)) {
       await fs.rm(skillDir, { recursive: true, force: true });
     }
@@ -1326,7 +1446,10 @@ export function createCliSkillService(
   ): Promise<Record<string, boolean>> {
     const status: Record<string, boolean> = {};
     for (const platform of SKILL_PLATFORMS) {
-      const skillDir = path.join(getPlatformSkillsDir(platform), validateSkillName(skillName));
+      const skillDir = path.join(
+        getPlatformSkillsDir(platform),
+        validateSkillName(skillName),
+      );
       status[platform.id] = await fileExists(skillDir);
     }
     return status;
@@ -1340,7 +1463,8 @@ export function createCliSkillService(
     const body = skill.instructions || skill.content || "";
     const frontmatter: string[] = ["---"];
     frontmatter.push(`name: ${yamlStr(skill.name)}`);
-    if (skill.description) frontmatter.push(`description: ${yamlStr(skill.description)}`);
+    if (skill.description)
+      frontmatter.push(`description: ${yamlStr(skill.description)}`);
     if (skill.version) frontmatter.push(`version: ${yamlStr(skill.version)}`);
     if (skill.author) frontmatter.push(`author: ${yamlStr(skill.author)}`);
     if (skill.tags && skill.tags.length > 0) {
@@ -1349,7 +1473,9 @@ export function createCliSkillService(
     const compatibility = Array.isArray(skill.compatibility)
       ? skill.compatibility
       : [skill.compatibility || "prompthub"];
-    frontmatter.push(`compatibility: [${compatibility.map(yamlStr).join(", ")}]`);
+    frontmatter.push(
+      `compatibility: [${compatibility.map(yamlStr).join(", ")}]`,
+    );
     frontmatter.push("---");
     frontmatter.push("");
     return `${frontmatter.join("\n")}${body}`;
@@ -1416,7 +1542,9 @@ export function createCliSkillService(
   ): Promise<SkillFileSnapshot[]> {
     const files = await readLocalFiles(skillDb, skillId);
     return files
-      .filter((file) => !file.isDirectory && !isInternalSkillRepoEntry(file.path))
+      .filter(
+        (file) => !file.isDirectory && !isInternalSkillRepoEntry(file.path),
+      )
       .map((file) => ({ relativePath: file.path, content: file.content }));
   }
 
@@ -1522,9 +1650,8 @@ export function createCliSkillService(
                   ) || "Local",
                 tags: sanitizeTags(parsed?.frontmatter.tags, manifest.tags),
                 instructions,
-                directory_fingerprint: await computeRepoDirectoryFingerprintByPath(
-                  skillFolderPath,
-                ),
+                directory_fingerprint:
+                  await computeRepoDirectoryFingerprintByPath(skillFolderPath),
                 filePath: skillMdPath,
                 localPath: skillFolderPath,
                 platforms: [platformName],

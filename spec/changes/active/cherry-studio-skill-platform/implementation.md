@@ -11,6 +11,7 @@
 - Added a Cherry Studio-specific platform adapter:
   - copies the complete skill package into `Data/Skills/<folder>`
   - requires `cherrystudio.sqlite` to exist before install
+  - detects Cherry Studio registry databases from `Data/agent.db`, `Data/agents.db`, or legacy `cherrystudio.sqlite`
   - upserts `agent_global_skill` with metadata parsed from `SKILL.md`
   - computes `content_hash` from `SKILL.md`
   - treats a copied folder without `agent_global_skill` registration as not installed
@@ -19,6 +20,10 @@
 - Added a Cherry Studio Lucide fallback icon in `PlatformIcon`.
 - Updated platform path resolution so `%APPDATA%` uses the real `APPDATA` environment variable when available.
 - Added Cherry Studio path and default-order regression coverage.
+- Fixed Cherry Studio built-in Skill detection for installs whose registry lives in `Data/agent.db`.
+  - Built-in status is still derived from Cherry Studio DB fields (`source='builtin'`, `builtin`, or `is_builtin`), not from hardcoded skill names.
+  - Agent Skill cards show DB-marked built-ins as `External install` plus `Built-in` when they are not matched to My Skills; uninstall stays disabled in list and detail surfaces.
+  - Deleting an imported My Skills entry with "delete copied distributions" still routes Cherry Studio cleanup through `uninstallCherryStudioSkill(...)`, so DB-marked built-ins reject deletion even when the user enters through the My Skills delete flow instead of Agent Skills.
 - Fixed the AI Workbench capability helper type contract so typecheck can validate route capability filtering.
 - Fixed AI Workbench capability checkbox handlers to read `event.currentTarget.checked`, which restored the full-suite capability-toggle regression.
 - Synced the stable platform reference matrix in `spec/knowledge/reference/agent-platforms.md`.

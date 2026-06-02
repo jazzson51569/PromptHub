@@ -16,5 +16,11 @@
 - [x] Remove duplicate Agent Skill local search and route Agent Skill filtering through the global Skill search query.
 - [x] Add missing Agent Skill / common action i18n keys across all supported desktop locales.
 - [x] Align Agent Skill and Project Skill management UI patterns, including single-row Agent Skill lists, right-side agent counts, cached scans, and a direct Agent settings management entry.
+- [x] Mark external symlink Agent Skill installs and expose a separate action for opening the symlink source target.
+- [x] Clarify symlink Agent Skill detail source cards so the agent shortcut path and source Skill path are shown separately.
+- [x] Mark Cherry Studio platform built-in Skills, show a dedicated badge, and prevent Agent Skill deletion for those built-ins.
+- [x] Mark non-PromptHub Agent Skill folders, including copied external folders, as external installs instead of PromptHub copy/symlink installs.
+- [x] Convert Agent Skill header stat badges into filters for all, managed, unmanaged, copy, and symlink views.
+- [x] Remove Agent-only name fallback matching and use the shared Skill scan status matrix with Project Skills.
 - [x] Verify related unit tests, typecheck, and lint.
 - [x] Record implementation and verification results.

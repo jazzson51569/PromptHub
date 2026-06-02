@@ -9,23 +9,27 @@ import {
 interface AgentSkillDetailActionsProps {
   isImporting?: boolean;
   isManaged?: boolean;
+  isUninstallDisabled?: boolean;
   isUninstalling?: boolean;
   onImport?: () => void | Promise<void>;
   onOpenFolder?: () => void | Promise<void>;
   onOpenManagedSkill?: () => void | Promise<void>;
   onUninstall?: () => void | Promise<void>;
   t: TFunction;
+  uninstallDisabledReason?: string;
 }
 
 export function AgentSkillDetailActions({
   isImporting = false,
   isManaged = false,
+  isUninstallDisabled = false,
   isUninstalling = false,
   onImport,
   onOpenFolder,
   onOpenManagedSkill,
   onUninstall,
   t,
+  uninstallDisabledReason,
 }: AgentSkillDetailActionsProps) {
   return (
     <>
@@ -62,10 +66,18 @@ export function AgentSkillDetailActions({
         {t("common.open", "Open")}
       </button>
       <button
-        onClick={() => void onUninstall?.()}
-        disabled={isUninstalling}
+        onClick={() => {
+          if (!isUninstallDisabled) {
+            void onUninstall?.();
+          }
+        }}
+        disabled={isUninstallDisabled || isUninstalling}
         className="inline-flex items-center gap-2 rounded-full border border-destructive/20 bg-destructive/5 px-3 py-2 text-sm font-medium text-destructive transition-all hover:bg-destructive/10 disabled:opacity-60"
-        title={t("common.uninstall", "Uninstall")}
+        title={
+          isUninstallDisabled && uninstallDisabledReason
+            ? uninstallDisabledReason
+            : t("common.uninstall", "Uninstall")
+        }
       >
         <TrashIcon className="h-4 w-4" />
         {t("common.uninstall", "Uninstall")}

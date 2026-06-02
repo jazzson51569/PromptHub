@@ -11,3 +11,8 @@
 - [x] Re-run escaped skill bug status audit against implementation and tests
 - [x] Fix release-blocking skill regression failures from the full desktop unit suite
 - [x] Verify desktop unit, lint, and typecheck gates are green
+- [x] Extend the Skill regression matrix with lifecycle UI status rows for Project, Agent, My Skills, and Store surfaces
+- [x] Add shared matrix tests for scanned Skill identity, install badges, external symlink handling, built-ins, and same-name variants
+- [x] Add source-origin by operation applicability matrix
+- [x] White-box audit matrix rows against current code and record partial coverage rows
+- [x] Correct Project/Agent scanned copy semantics so unmatched copied folders are external installs, not PromptHub copy installs

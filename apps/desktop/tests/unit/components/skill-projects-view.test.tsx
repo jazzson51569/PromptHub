@@ -216,6 +216,8 @@ describe("SkillProjectsView", () => {
     expect(screen.getAllByRole("button", { name: "Open Folder" })).toHaveLength(
       2,
     );
+    expect(screen.queryByText("Copy install")).not.toBeInTheDocument();
+    expect(screen.getAllByText("External install")).toHaveLength(2);
     expect(
       screen.getByRole("button", { name: "Import from My Skills" }),
     ).toHaveClass("h-10", "w-full");
@@ -309,6 +311,134 @@ describe("SkillProjectsView", () => {
     expect(screen.queryByText("Source / Content")).not.toBeInTheDocument();
     expect(screen.getByText("novel-auditor")).toBeInTheDocument();
     expect(screen.getByText("novel-builder")).toBeInTheDocument();
+  });
+
+  it("marks external symlink project skills distinctly from copied installs", async () => {
+    useSkillStore.setState({
+      projectScanState: {
+        "project-1": {
+          scannedSkills: [
+            {
+              name: "external-writer",
+              description: "External linked writer",
+              author: "PromptHub",
+              tags: [],
+              instructions: "# external-writer",
+              filePath: "/tmp/novel/.agents/skills/external-writer/SKILL.md",
+              localPath: "/tmp/novel/.agents/skills/external-writer",
+              platforms: ["Custom"],
+              installMode: "symlink",
+              symlinkTargetPath: "/external/feishu/skills/external-writer",
+              isPromptHubManagedLink: false,
+            },
+          ],
+          isScanning: false,
+          error: null,
+        },
+      },
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      render(<SkillProjectsView />);
+    });
+
+    expect(screen.getByText("external-writer")).toBeInTheDocument();
+    expect(screen.queryByText("Symlink install")).not.toBeInTheDocument();
+    expect(screen.getByText("External install")).toBeInTheDocument();
+  });
+
+  it("treats unmatched symlink project skills without managed metadata as external", async () => {
+    useSkillStore.setState({
+      skills: [],
+      projectScanState: {
+        "project-1": {
+          scannedSkills: [
+            {
+              name: "legacy-linked",
+              description: "Legacy linked project skill",
+              author: "External",
+              tags: [],
+              instructions: "# legacy-linked",
+              filePath: "/tmp/novel/.agents/skills/legacy-linked/SKILL.md",
+              localPath: "/tmp/novel/.agents/skills/legacy-linked",
+              platforms: ["Custom"],
+              installMode: "symlink",
+              symlinkTargetPath: "/external/legacy/skills/legacy-linked",
+            },
+          ],
+          isScanning: false,
+          error: null,
+        },
+      },
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      render(<SkillProjectsView />);
+    });
+
+    expect(screen.getByText("legacy-linked")).toBeInTheDocument();
+    expect(screen.queryByText("Symlink install")).not.toBeInTheDocument();
+    expect(screen.getByText("External install")).toBeInTheDocument();
+  });
+
+  it("shows a source-target action for external symlink project skills", async () => {
+    const { electron } = installWindowMocks({
+      api: {
+        skill: {
+          readLocalFileByPath: vi.fn().mockResolvedValue({
+            content: "# external-writer",
+          }),
+          listLocalFilesByPath: vi.fn().mockResolvedValue([]),
+        },
+      },
+      electron: {
+        openPath: vi.fn(),
+      },
+    });
+    useSkillStore.setState({
+      projectScanState: {
+        "project-1": {
+          scannedSkills: [
+            {
+              name: "external-writer",
+              description: "External linked writer",
+              author: "PromptHub",
+              tags: [],
+              instructions: "# external-writer",
+              filePath: "/tmp/novel/.agents/skills/external-writer/SKILL.md",
+              localPath: "/tmp/novel/.agents/skills/external-writer",
+              platforms: ["Custom"],
+              installMode: "symlink",
+              symlinkTargetPath: "/external/feishu/skills/external-writer",
+              isPromptHubManagedLink: false,
+            },
+          ],
+          isScanning: false,
+          error: null,
+        },
+      },
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      render(<SkillProjectsView />);
+    });
+
+    fireEvent.click(screen.getByText("external-writer"));
+
+    const sourceTargetButton = await screen.findByRole("button", {
+      name: /Open source Skill folder/i,
+    });
+    expect(sourceTargetButton).toHaveTextContent(
+      "/external/feishu/skills/external-writer",
+    );
+
+    fireEvent.click(sourceTargetButton);
+
+    await waitFor(() => {
+      expect(electron.openPath).toHaveBeenCalledWith(
+        "/external/feishu/skills/external-writer",
+      );
+    });
   });
 
   it("removes a registered project after confirmation without deleting files", async () => {
@@ -709,6 +839,80 @@ describe("SkillProjectsView", () => {
     expect(setStoreView).toHaveBeenCalledWith("projects");
     expect(setStoreView).not.toHaveBeenCalledWith("my-skills");
     expect(selectSkill).toHaveBeenCalledWith(null);
+  });
+
+  it("treats a project copy with the same directory fingerprint as a My Skills install", async () => {
+    const selectSkill = vi.fn();
+    const setStoreView = vi.fn();
+
+    useSkillStore.setState({
+      skills: [
+        {
+          id: "skill-1",
+          name: "claude-api",
+          description: "Build Claude API apps",
+          instructions: "# claude-api",
+          content: "# claude-api",
+          protocol_type: "skill",
+          author: "PromptHub",
+          local_repo_path: "/Users/demo/PromptHub/skills/claude-api/repo",
+          directory_fingerprint: "fingerprint-claude-api",
+          tags: ["api"],
+          is_favorite: false,
+          currentVersion: 0,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+      selectSkill,
+      setStoreView,
+      selectedProjectId: "project-1",
+      projectScanState: {
+        "project-1": {
+          scannedSkills: [
+            {
+              name: "claude-api",
+              description: "Build Claude API apps",
+              author: "PromptHub",
+              tags: ["api"],
+              instructions: "# claude-api",
+              directory_fingerprint: "fingerprint-claude-api",
+              filePath: "/tmp/novel/.agents/skills/claude-api/SKILL.md",
+              localPath: "/tmp/novel/.agents/skills/claude-api",
+              platforms: ["Custom"],
+              installMode: "copy",
+            },
+          ],
+          isScanning: false,
+          error: null,
+        },
+      },
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    await act(async () => {
+      render(<SkillProjectsView />);
+    });
+
+    expect(screen.getByText("In My Skills")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Import to My Skills" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /claude-api/i }));
+
+    expect(
+      screen.queryByRole("button", { name: "Import to My Skills" }),
+    ).not.toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "This skill is already managed in My Skills. If the project copy changes, you can re-import to refresh it.",
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open in My Skills" }));
+
+    expect(setStoreView).toHaveBeenCalledWith("my-skills");
+    expect(selectSkill).toHaveBeenCalledWith("skill-1");
   });
 
   it("imports project skills into my skills with copy mode", async () => {

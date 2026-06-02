@@ -37,6 +37,11 @@ import {
   getMissingProjectTargetDirs,
   normalizeProjectPathForComparison,
 } from "../../services/project-skill-targets";
+import {
+  buildSkillLibraryIdentityLookup,
+  isExternalScannedSkillInstall,
+  matchScannedSkillWithLookup,
+} from "../../services/skill-scan-status";
 
 const OPEN_CREATE_SKILL_PROJECT_MODAL_EVENT = "open-create-skill-project-modal";
 const PROJECT_SECTION_HEADER_CLASS =
@@ -678,7 +683,7 @@ export function SkillProjectsView() {
         }),
         "success",
       );
-      await loadDeployedStatus();
+      await loadDeployedStatus({ force: true });
     } catch (error) {
       showToast(
         error instanceof Error
@@ -755,26 +760,16 @@ export function SkillProjectsView() {
   }, [handleScanProject, projectScanState, selectedProject]);
 
   const importedLibrarySkillLookup = useMemo(() => {
-    const byPath = new Map<string, Skill>();
-    for (const skill of skills) {
-      if (skill.local_repo_path) {
-        byPath.set(
-          normalizeProjectPathForComparison(skill.local_repo_path),
-          skill,
-        );
-      }
-      if (skill.source_url) {
-        byPath.set(normalizeProjectPathForComparison(skill.source_url), skill);
-      }
-    }
-    return byPath;
+    return buildSkillLibraryIdentityLookup(skills);
   }, [skills]);
 
   const getImportedLibrarySkill = useCallback(
-    (scannedSkill: ScannedSkill): Skill | null =>
-      importedLibrarySkillLookup.get(
-        normalizeProjectPathForComparison(scannedSkill.localPath),
-      ) ?? null,
+    (scannedSkill: ScannedSkill): Skill | null => {
+      return matchScannedSkillWithLookup(
+        scannedSkill,
+        importedLibrarySkillLookup,
+      );
+    },
     [importedLibrarySkillLookup],
   );
 
@@ -1279,6 +1274,11 @@ export function SkillProjectsView() {
                           const importedSkill =
                             getImportedLibrarySkill(scannedSkill);
                           const isInMySkills = Boolean(importedSkill);
+                          const isExternalInstall =
+                            isExternalScannedSkillInstall(
+                              scannedSkill,
+                              isInMySkills,
+                            );
 
                           return (
                             <article
@@ -1325,6 +1325,29 @@ export function SkillProjectsView() {
                                       <div className="mt-2 truncate font-mono text-[11px] text-muted-foreground">
                                         {inferDisplayPath(
                                           scannedSkill.localPath,
+                                        )}
+                                      </div>
+                                      <div className="mt-3 flex flex-wrap gap-1.5">
+                                        {isExternalInstall ? (
+                                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                                            {t(
+                                              "skill.externalInstall",
+                                              "External install",
+                                            )}
+                                          </span>
+                                        ) : (
+                                          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                                            {scannedSkill.installMode ===
+                                            "symlink"
+                                              ? t(
+                                                  "skill.installModeSymlink",
+                                                  "Symlink install",
+                                                )
+                                              : t(
+                                                  "skill.installModeCopy",
+                                                  "Copy install",
+                                                )}
+                                          </span>
                                         )}
                                       </div>
                                     </div>

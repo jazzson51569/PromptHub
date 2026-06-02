@@ -50,6 +50,7 @@ import {
   type SkillPlatform,
 } from "@prompthub/shared/constants/platforms";
 import {
+  getCherryStudioPlatformSkillMetadata,
   isCherryStudioPlatform,
   uninstallCherryStudioPlatformSkill,
 } from "./cherry-studio-skill-platform";
@@ -81,6 +82,83 @@ function encodePathSegments(value: string): string {
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+}
+
+interface InstalledSkillRemoteSourceRow {
+  source_url: string | null;
+  content_url: string | null;
+}
+
+function parseHttpUrl(value: string | null | undefined): URL | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(value.trim());
+    return ["http:", "https:"].includes(parsed.protocol) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeUrlPath(pathname: string): string {
+  return pathname.replace(/\/+$/g, "");
+}
+
+function isUrlWithinSourceScope(target: URL, source: URL): boolean {
+  if (target.origin !== source.origin) {
+    return false;
+  }
+
+  const targetPath = normalizeUrlPath(target.pathname);
+  const sourcePath = normalizeUrlPath(source.pathname);
+  return targetPath === sourcePath || targetPath.startsWith(`${sourcePath}/`);
+}
+
+function isTrustedInstalledSkillRemoteUrl(
+  targetUrl: string,
+  rows: InstalledSkillRemoteSourceRow[],
+): boolean {
+  const target = parseHttpUrl(targetUrl);
+  if (!target) {
+    return false;
+  }
+
+  return rows.some((row) => {
+    const contentUrl = parseHttpUrl(row.content_url);
+    if (contentUrl?.href === target.href) {
+      return true;
+    }
+
+    const sourceUrl = parseHttpUrl(row.source_url);
+    return sourceUrl ? isUrlWithinSourceScope(target, sourceUrl) : false;
+  });
+}
+
+function readInstalledSkillRemoteSources(
+  db: { prepare?: (sql: string) => { all?: () => unknown[] } } | null,
+): InstalledSkillRemoteSourceRow[] {
+  if (!db || typeof db.prepare !== "function") {
+    return [];
+  }
+
+  const statement = db.prepare(
+    `SELECT source_url, content_url
+     FROM skills
+     WHERE (source_url IS NOT NULL AND source_url != '')
+        OR (content_url IS NOT NULL AND content_url != '')`,
+  );
+  const rows = statement?.all?.();
+
+  return Array.isArray(rows)
+    ? rows.filter(
+        (row): row is InstalledSkillRemoteSourceRow =>
+          typeof row === "object" &&
+          row !== null &&
+          ("source_url" in row || "content_url" in row),
+      )
+    : [];
 }
 
 function isRemoteTreeEntry(
@@ -326,21 +404,20 @@ export class SkillInstaller {
 
     const skillsDir = getPlatformSkillsDir(platform);
     const scannedSkills = await this.scanLocalPreview([skillsDir]);
+    const isCherryStudio = isCherryStudioPlatform(platform.id);
     const agentSkills = await Promise.all(
       scannedSkills.map(async (skill): Promise<AgentScannedSkill> => {
-        let installMode: AgentScannedSkill["installMode"] = "copy";
-        try {
-          const stat = await fs.lstat(skill.localPath);
-          installMode = stat.isSymbolicLink() ? "symlink" : "copy";
-        } catch (error: unknown) {
-          if (getErrorCode(error) !== "ENOENT") {
-            throw error;
-          }
-        }
+        const platformMetadata = isCherryStudio
+          ? await getCherryStudioPlatformSkillMetadata(
+              platform,
+              skill.localPath,
+            ).catch(() => ({ isBuiltin: false }))
+          : { isBuiltin: false };
 
         return {
           ...skill,
-          installMode,
+          installMode: skill.installMode ?? "copy",
+          isPlatformBuiltin: platformMetadata.isBuiltin || undefined,
           platformSkillPath: skill.localPath,
           platforms: [platform.name],
         };
@@ -924,6 +1001,36 @@ export class SkillInstaller {
     return result;
   }
 
+  private static async getScannedSkillInstallMetadata(
+    skillFolderPath: string,
+  ): Promise<{
+    installMode: ScannedSkill["installMode"];
+    symlinkTargetPath?: string;
+    isPromptHubManagedLink?: boolean;
+  }> {
+    const stat = await fs.lstat(skillFolderPath).catch(() => null);
+    if (!stat?.isSymbolicLink()) {
+      return { installMode: "copy" };
+    }
+
+    const rawTarget = await fs.readlink(skillFolderPath).catch(() => null);
+    const resolvedTarget = rawTarget
+      ? path.isAbsolute(rawTarget)
+        ? rawTarget
+        : path.resolve(path.dirname(skillFolderPath), rawTarget)
+      : undefined;
+    const symlinkTargetPath = resolvedTarget;
+    const isPromptHubManagedLink = symlinkTargetPath
+      ? await isManagedRepoPath(symlinkTargetPath).catch(() => false)
+      : false;
+
+    return {
+      installMode: "symlink",
+      symlinkTargetPath,
+      isPromptHubManagedLink,
+    };
+  }
+
   private static async resolveSingleSkillDirFromRepo(
     repoDir: string,
   ): Promise<string> {
@@ -1281,6 +1388,8 @@ export class SkillInstaller {
                 },
                 { defaultTags: [] },
               );
+              const installMetadata =
+                await this.getScannedSkillInstallMetadata(skillFolderPath);
 
               skillMap.set(skillFolderPath, {
                 directory_fingerprint: computeDirectoryFingerprint(
@@ -1293,8 +1402,12 @@ export class SkillInstaller {
                 tags: sanitized.tags,
                 instructions: sanitized.instructions || instructions,
                 filePath: skillMdPath,
+                installMode: installMetadata.installMode,
+                isPromptHubManagedLink:
+                  installMetadata.isPromptHubManagedLink,
                 localPath: skillFolderPath,
                 platforms: [platformName],
+                symlinkTargetPath: installMetadata.symlinkTargetPath,
                 safetyReport: aiConfig
                   ? await scanSkillSafety({
                       name: sanitized.name,
@@ -1366,21 +1479,35 @@ export class SkillInstaller {
   ): Promise<string> {
     try {
       let githubToken: string | null = null;
+      let isInstalledSkillRemoteSource = false;
       try {
         const db = initDatabase();
         if (db && typeof db.prepare === "function") {
           githubToken = readGithubTokenSetting(db);
+          isInstalledSkillRemoteSource = isTrustedInstalledSkillRemoteUrl(
+            url,
+            readInstalledSkillRemoteSources(db),
+          );
         }
       } catch (tokenError) {
         // DB may be unavailable during very early startup or in tests —
         // fall back to an unauthenticated request without failing the
         // fetch.
         console.warn(
-          "Unable to load githubToken setting, continuing unauthenticated:",
+          "Unable to load skill remote fetch settings, continuing unauthenticated:",
           tokenError,
         );
       }
-      return await fetchRemoteText(url, 0, { ...options, githubToken });
+      return await fetchRemoteText(url, 0, {
+        ...options,
+        ...(isInstalledSkillRemoteSource
+          ? {
+              allowPrivateNetwork: true,
+              allowInsecurePrivateNetworkHttp: true,
+            }
+          : {}),
+        githubToken,
+      });
     } catch (error) {
       console.error("Failed to fetch remote content from remote URL:", error);
       throw error;
@@ -1390,18 +1517,31 @@ export class SkillInstaller {
   static async fetchRemoteContentBytes(url: string): Promise<Uint8Array> {
     try {
       let githubToken: string | null = null;
+      let isInstalledSkillRemoteSource = false;
       try {
         const db = initDatabase();
         if (db && typeof db.prepare === "function") {
           githubToken = readGithubTokenSetting(db);
+          isInstalledSkillRemoteSource = isTrustedInstalledSkillRemoteUrl(
+            url,
+            readInstalledSkillRemoteSources(db),
+          );
         }
       } catch (tokenError) {
         console.warn(
-          "Unable to load githubToken setting, continuing unauthenticated:",
+          "Unable to load skill remote fetch settings, continuing unauthenticated:",
           tokenError,
         );
       }
-      return await fetchRemoteBytes(url, 0, { githubToken });
+      return await fetchRemoteBytes(url, 0, {
+        ...(isInstalledSkillRemoteSource
+          ? {
+              allowPrivateNetwork: true,
+              allowInsecurePrivateNetworkHttp: true,
+            }
+          : {}),
+        githubToken,
+      });
     } catch (error) {
       console.error("Failed to fetch remote bytes from remote URL:", error);
       throw error;

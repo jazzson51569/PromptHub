@@ -165,7 +165,7 @@ export function useSkillPlatform(
     setInstallDetails(details);
     setInstallStatus(status);
     setSelectedPlatforms(new Set());
-    await loadDeployedStatus();
+    await loadDeployedStatus({ force: true });
   }, [loadDeployedStatus, runtimeCapabilities.skillPlatformIntegration, skill]);
 
   useEffect(() => {

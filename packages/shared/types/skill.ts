@@ -1,7 +1,7 @@
-import type { AIProtocol } from './ai';
-import type { SkillPlatform } from '../constants/platforms';
+import type { AIProtocol } from "./ai";
+import type { SkillPlatform } from "../constants/platforms";
 
-export type SkillVisibility = 'private' | 'shared';
+export type SkillVisibility = "private" | "shared";
 
 export interface Skill {
   id: string;
@@ -264,6 +264,9 @@ export interface SkillLocalFileEntry {
   path: string;
   content: string;
   isDirectory: boolean;
+  mimeType?: string;
+  encoding?: "text" | "data-url" | "placeholder";
+  previewKind?: "image" | "audio" | "video" | "pdf";
 }
 
 export interface SkillLocalFileBufferEntry {
@@ -402,6 +405,12 @@ export interface ScannedSkill {
   filePath: string;
   /** Parent directory of the SKILL.md file (skill folder path) */
   localPath: string;
+  /** How the skill folder is present in the scanned directory. */
+  installMode?: SkillInstallMode;
+  /** Resolved source directory when localPath is a symlink. */
+  symlinkTargetPath?: string;
+  /** True when the symlink target points into PromptHub-managed skill storage. */
+  isPromptHubManagedLink?: boolean;
   platforms: string[];
   safetyReport?: SkillSafetyReport;
   /**
@@ -415,6 +424,8 @@ export interface ScannedSkill {
 export interface AgentScannedSkill extends ScannedSkill {
   /** How the skill folder is present in the agent/platform skills directory. */
   installMode: SkillInstallMode;
+  /** True when this skill is built into the owning agent platform itself. */
+  isPlatformBuiltin?: boolean;
   /**
    * Absolute path to the concrete platform skill folder that should be removed
    * when uninstalling this agent-local skill.

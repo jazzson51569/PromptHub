@@ -90,6 +90,8 @@ export function SkillStoreDetail({
   const getRegistrySkillUpdateStatus = useSkillStore(
     (state) => state.getRegistrySkillUpdateStatus,
   );
+  const selectSkill = useSkillStore((state) => state.selectSkill);
+  const setStoreView = useSkillStore((state) => state.setStoreView);
   const uninstallRegistrySkill = useSkillStore(
     (state) => state.uninstallRegistrySkill,
   );
@@ -192,6 +194,9 @@ export function SkillStoreDetail({
   const isInstalling = externalIsInstalling || localIsInstalling;
   const canShowUpdateActions =
     installed && Boolean(skill.content_url || skill.content);
+  const canApplyStoreUpdate = updateStatus === "update-available";
+  const canOverwriteLocalChanges =
+    updateStatus === "conflict" || updateStatus === "local-modified";
   const installableSkill = useMemo(
     () => ({
       ...skill,
@@ -562,6 +567,15 @@ export function SkillStoreDetail({
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  const handleOpenInstalledSkill = () => {
+    if (!installedSkill) {
+      return;
+    }
+    setStoreView("my-skills");
+    selectSkill(installedSkill.id);
+    onClose();
   };
 
   const footerButtonBase =
@@ -938,22 +952,28 @@ export function SkillStoreDetail({
                       ) : (
                         <RefreshCwIcon className="w-3.5 h-3.5" />
                       )}
-                      {t("skill.checkUpdate", "Check update")}
-                    </button>
-                    <button
-                      onClick={() => handleUpdate(false)}
-                      disabled={isCheckingUpdate || isUpdating}
-                      className={footerButtonPrimary}
-                    >
-                      {isUpdating ? (
-                        <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <DownloadIcon className="w-3.5 h-3.5" />
+                      {t(
+                        updateStatus
+                          ? "skill.recheckUpdate"
+                          : "skill.checkUpdate",
+                        updateStatus ? "Recheck update" : "Check update",
                       )}
-                      {t("skill.update", "Update")}
                     </button>
-                    {(updateStatus === "conflict" ||
-                      updateStatus === "local-modified") && (
+                    {canApplyStoreUpdate && (
+                      <button
+                        onClick={() => handleUpdate(false)}
+                        disabled={isCheckingUpdate || isUpdating}
+                        className={footerButtonPrimary}
+                      >
+                        {isUpdating ? (
+                          <Loader2Icon className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <DownloadIcon className="w-3.5 h-3.5" />
+                        )}
+                        {t("skill.update", "Update")}
+                      </button>
+                    )}
+                    {canOverwriteLocalChanges && (
                       <button
                         onClick={() => handleUpdate(true)}
                         disabled={isUpdating}
@@ -979,10 +999,23 @@ export function SkillStoreDetail({
                   )}
                   {t("skill.removeFromLibrary", "Remove")}
                 </button>
-                <div className={footerStatusImported}>
-                  <CheckIcon className="w-4 h-4" />
-                  {t("skill.addedToLibrary", "Added")}
-                </div>
+                {installedSkill ? (
+                  <button
+                    type="button"
+                    onClick={handleOpenInstalledSkill}
+                    className={`${footerStatusImported} transition-colors hover:bg-emerald-500/15 hover:text-emerald-700 dark:hover:text-emerald-300`}
+                    aria-label={t("skill.openInMySkills", "Open in My Skills")}
+                    title={t("skill.openInMySkills", "Open in My Skills")}
+                  >
+                    <CheckIcon className="w-4 h-4" />
+                    {t("skill.addedToLibrary", "Added")}
+                  </button>
+                ) : (
+                  <div className={footerStatusImported}>
+                    <CheckIcon className="w-4 h-4" />
+                    {t("skill.addedToLibrary", "Added")}
+                  </div>
+                )}
               </>
             ) : (
               <button

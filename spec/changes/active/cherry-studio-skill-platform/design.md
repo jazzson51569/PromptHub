@@ -4,7 +4,7 @@
 
 Register Cherry Studio in `SKILL_PLATFORMS` with a `Data/Skills` relative path, but do not model it as a plain filesystem-only skill platform.
 
-Cherry Studio source inspection shows `Data/Skills/<folder>` is only global skill storage. The UI list is backed by `cherrystudio.sqlite` table `agent_global_skill`, and per-agent enablement is backed by `agent_skill`. Therefore PromptHub needs a Cherry Studio-specific adapter for install, uninstall, and status checks.
+Cherry Studio source inspection shows `Data/Skills/<folder>` is only global skill storage. The UI list is backed by a Cherry Studio SQLite registry: current builds may use `Data/agent.db` or `Data/agents.db` with `skills` / `agent_skills` / `agents`, while legacy builds use `cherrystudio.sqlite` with `agent_global_skill` / `agent_skill` / `agent`. Therefore PromptHub needs a Cherry Studio-specific adapter for install, uninstall, and status checks.
 
 ## Affected Areas
 

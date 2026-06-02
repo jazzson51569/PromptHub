@@ -8,9 +8,11 @@ interface AgentSkillPreviewSidebarProps {
   isManaged?: boolean;
   onImport?: () => void | Promise<void>;
   onOpenFolder?: () => void | Promise<void>;
+  onOpenSymlinkTarget?: () => void | Promise<void>;
   platformId: string;
   platformName: string;
   sourcePath: string;
+  symlinkTargetPath?: string;
   t: TFunction;
 }
 
@@ -20,11 +22,20 @@ export function AgentSkillPreviewSidebar({
   isManaged = false,
   onImport,
   onOpenFolder,
+  onOpenSymlinkTarget,
   platformId,
   platformName,
   sourcePath,
+  symlinkTargetPath,
   t,
 }: AgentSkillPreviewSidebarProps) {
+  const showSymlinkTarget =
+    installMode === "symlink" && Boolean(symlinkTargetPath);
+  const shortcutTitle =
+    installMode === "symlink"
+      ? t("skill.openAgentShortcut", "Open agent shortcut")
+      : t("skill.openLocalSource", "Open Local Skill Folder");
+
   return (
     <div className="space-y-6">
       <section className="space-y-4">
@@ -77,13 +88,34 @@ export function AgentSkillPreviewSidebar({
             <FolderOpenIcon className="h-5 w-5 shrink-0 text-primary" />
             <div className="min-w-0">
               <div className="text-sm font-semibold text-foreground">
-                {t("skill.openLocalSource", "Open Local Skill Folder")}
+                {shortcutTitle}
               </div>
               <div className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
                 {sourcePath}
               </div>
             </div>
           </button>
+          {showSymlinkTarget ? (
+            <button
+              type="button"
+              onClick={() => void onOpenSymlinkTarget?.()}
+              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-accent/60 px-4 py-4 text-left transition-colors hover:bg-accent"
+              title={symlinkTargetPath}
+            >
+              <FolderOpenIcon className="h-5 w-5 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground">
+                  {t(
+                    "skill.openSourceSkillFolder",
+                    "Open source Skill folder",
+                  )}
+                </div>
+                <div className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
+                  {symlinkTargetPath}
+                </div>
+              </div>
+            </button>
+          ) : null}
         </div>
       </section>
     </div>

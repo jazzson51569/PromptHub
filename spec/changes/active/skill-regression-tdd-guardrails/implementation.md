@@ -12,6 +12,18 @@
 - Updated `spec/workflow/04-verification/README.md` so Skill-risk changes must cite matrix coverage.
 - Updated `spec/rules/README.md` to point to the matrix.
 - Audited the ten escaped Skill bug reports against current implementation and regression tests.
+- Extended the matrix with lifecycle UI state rows covering Project Skill, Agent Skill, My Skills, and Store surfaces:
+  - copied folders;
+  - PromptHub-managed symlinks;
+  - external or unknown symlinks;
+  - same-name-but-different-identity variants;
+  - platform built-ins;
+  - import, install, remove, uninstall, delete, and refresh operations.
+- Added a shared scan-status helper and tests so Project and Agent pages no longer keep separate identity/status logic.
+- Added a source-origin by operation applicability matrix so every supported source type is explicitly marked as applicable, not applicable, imported-only, scanned-only, or platform-specific for each lifecycle operation.
+- Added a white-box implementation audit table and a dedicated audit record:
+  - confirmed Project/Agent shared status logic, source-id Store identity, DB source uniqueness, external symlink labeling, and Cherry Studio built-in uninstall guards;
+  - marked local-dir branch awareness, source-label snapshot coverage, batch My Skills project-distribution delete coverage, and full backup restore status coverage as partial rather than complete.
 - Fixed the remaining release-blocking Skill verification failures:
   - deployed status filters and stats now accept both current skill IDs and legacy/name-keyed deployed sets;
   - custom store empty-state regression test now exercises a custom source instead of the unopened official store;
@@ -42,6 +54,12 @@
   - `pnpm --filter @prompthub/desktop lint`
   - `pnpm --filter @prompthub/desktop typecheck`
   - Result: both passed.
+- Passed matrix-driven lifecycle status regression tests:
+  - `pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/skill-scan-status.test.ts tests/unit/components/skill-agents-view.test.tsx tests/unit/components/skill-projects-view.test.tsx`
+  - Result: 3 files passed, 46 tests passed.
+  - Confirms unmanaged copied Project/Agent folders show `External install`; `Copy install` is reserved for My Skills-matched copy distributions.
+- Added documentation audit record:
+  - `spec/changes/active/skill-regression-tdd-guardrails/whitebox-audit.md`
 
 ## Synced Docs
 

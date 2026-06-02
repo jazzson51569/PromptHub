@@ -84,12 +84,45 @@ In progress.
 - 通过：`pnpm exec vitest run`（在 `apps/desktop/` 下执行）
 - 通过：`pnpm build`（在 `apps/desktop/` 下执行）
 - 通过：`pnpm --filter @prompthub/desktop exec eslint src/renderer/services/agent-root-paths.ts src/renderer/stores/settings.store.ts src/renderer/components/settings/SkillSettings.tsx src/renderer/services/self-hosted-sync.ts src/main/services/skill-installer-utils.ts src/main/ipc/settings.ipc.ts tests/unit/stores/settings-agent-roots.test.ts tests/unit/components/skill-settings.test.tsx tests/unit/stores/settings-rules-sync.test.ts tests/unit/main/skill-installer-utils.test.ts tests/unit/services/self-hosted-sync.test.ts`
-- 通过：`node -e "for (const f of ['en','zh','zh-TW','ja','fr','de','es']) JSON.parse(require('fs').readFileSync('apps/desktop/src/renderer/i18n/locales/'+f+'.json','utf8'));"` 
+- 通过：`node -e "for (const f of ['en','zh','zh-TW','ja','fr','de','es']) JSON.parse(require('fs').readFileSync('apps/desktop/src/renderer/i18n/locales/'+f+'.json','utf8'));"`
 - 通过：`pnpm --filter @prompthub/desktop build`
 - 未通过：`pnpm --filter @prompthub/desktop typecheck`
   - 现存仓库问题：`src/main/services/skill-installer.ts(295,35)`、`SkillSettings.tsx` 的 `enabled` 字段类型、`SkillListView.tsx` 缺少 `useSettingsStore`、`rule-platform-order.ts` 的 `RulePlatformId` 类型、`settings.store.ts` 的既有设置字段类型
 - 部分通过但未最终绿灯：`pnpm --filter @prompthub/desktop test:run`
   - 大部分测试已执行通过，但在接近结束时因 Node/Vitest worker OOM 退出，属于仓库级测试资源问题，不是本轮变更的明确功能回归
+- 项目 Skill 扫描结果现在会保留安装方式元数据：
+  - `installMode` 区分复制安装和软链接安装
+  - `symlinkTargetPath` 记录软链接源头目录
+  - `isPromptHubManagedLink=false` 时在列表中显示 `External install`
+- 项目 Skill 安装来源标签现在按管理边界显示：
+  - 与 My Skills 稳定匹配的 copy 分发显示 `Copy install`。
+  - 未匹配到 My Skills 的项目本地 copy 文件夹显示 `External install`。
+  - PromptHub 管理的 symlink 显示 `Symlink install`。
+  - 非 PromptHub 管理的 symlink 显示 `External install`。
+- 项目 Skill 与 My Skills 的关联识别现在按稳定来源判断：
+  - 优先匹配项目路径与库内 `local_repo_path` / `source_url`。
+  - 对 symlink 还会匹配 `symlinkTargetPath`。
+  - 对 copy 分发会使用 `directory_fingerprint` 精确匹配库内 Skill。
+  - 不按名称兜底，避免同名不同来源的项目 Skill 被误认。
+- 项目 Skill 状态判断现在使用与 Agent Skills 相同的共享 Skill scan status helper，避免项目页和 Agent 页各维护一套标签/关联逻辑。
+- 项目 Skill 详情的来源区域现在会在软链接安装时分别显示当前项目快捷方式路径和源 Skill 路径，两个卡片都可以单独打开。
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/main/skill-installer.test.ts --testNamePattern "discovers project skills installed as symlink directories"`
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx --testNamePattern "external symlink project|source-target"`
+- 通过：`pnpm --filter @prompthub/desktop typecheck`
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx`
+- 通过：`pnpm --filter @prompthub/desktop typecheck`
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx --testNamePattern "same directory fingerprint|same-name project skills"`
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-projects-view.test.tsx`
+- 通过：`pnpm --filter @prompthub/desktop typecheck`
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/components/skill-agents-view.test.tsx tests/unit/components/skill-projects-view.test.tsx`
+  - 2 files passed
+  - 34 tests passed
+  - Existing React `act(...)` warnings still appear in the Agent detail test path, but all assertions pass.
+- 通过：`pnpm --filter @prompthub/desktop typecheck`
+- 通过：`pnpm --filter @prompthub/desktop exec vitest run tests/unit/services/skill-scan-status.test.ts tests/unit/components/skill-agents-view.test.tsx tests/unit/components/skill-projects-view.test.tsx`
+  - 3 files passed
+  - 46 tests passed
+  - Covers shared Project/Agent lifecycle status rows, including unmanaged copied folders as external installs.
 
 ## Tests Added / Updated
 

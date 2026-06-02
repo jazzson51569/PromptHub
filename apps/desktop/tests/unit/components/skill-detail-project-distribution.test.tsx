@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Skill } from "@prompthub/shared/types";
@@ -6,8 +12,10 @@ import { SkillFullDetailPage } from "../../../src/renderer/components/skill/Skil
 import { installWindowMocks } from "../../helpers/window";
 
 import en from "../../../src/renderer/i18n/locales/en.json";
+import zh from "../../../src/renderer/i18n/locales/zh.json";
 
 type TranslationTree = Record<string, unknown>;
+let currentTranslations: TranslationTree = en as TranslationTree;
 
 function getPathValue(source: TranslationTree, path: string): unknown {
   return path.split(".").reduce<unknown>((current, segment) => {
@@ -18,8 +26,13 @@ function getPathValue(source: TranslationTree, path: string): unknown {
   }, source);
 }
 
-function interpolate(template: string, values: Record<string, unknown>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => String(values[key] ?? ""));
+function interpolate(
+  template: string,
+  values: Record<string, unknown>,
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) =>
+    String(values[key] ?? ""),
+  );
 }
 
 function translate(
@@ -37,7 +50,7 @@ function translate(
       : typeof options.defaultValue === "string"
         ? options.defaultValue
         : key;
-  const value = getPathValue(en as TranslationTree, key);
+  const value = getPathValue(currentTranslations, key);
   const template = typeof value === "string" ? value : defaultValue;
   return interpolate(template, options);
 }
@@ -89,7 +102,9 @@ const baseSkill: Skill = {
   updated_at: Date.now(),
 };
 
-function createSkillStoreState(overrides: Partial<Record<string, unknown>> = {}) {
+function createSkillStoreState(
+  overrides: Partial<Record<string, unknown>> = {},
+) {
   return {
     skills: [baseSkill],
     loadSkills: vi.fn().mockResolvedValue(undefined),
@@ -178,7 +193,9 @@ function createSettingsState(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
-function bindStoreSelector<TState extends Record<string, unknown>>(state: TState) {
+function bindStoreSelector<TState extends Record<string, unknown>>(
+  state: TState,
+) {
   return (selector?: ((value: TState) => unknown) | undefined) =>
     typeof selector === "function" ? selector(state) : state;
 }
@@ -230,7 +247,9 @@ async function renderProjectDistribution(options?: {
   fireEvent.click(screen.getByRole("button", { name: "Project Distribution" }));
 
   const workspaceCards = screen.getAllByText("Workspace");
-  const projectCardLabel = workspaceCards.find((node) => node.tagName.toLowerCase() !== "button");
+  const projectCardLabel = workspaceCards.find(
+    (node) => node.tagName.toLowerCase() !== "button",
+  );
   if (!projectCardLabel) {
     throw new Error("Project card label not found");
   }
@@ -244,13 +263,14 @@ async function renderProjectDistribution(options?: {
 describe("Skill detail project distribution", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    currentTranslations = en as TranslationTree;
     installWindowMocks({
       api: {
         skill: {
           getRepoPath: vi.fn().mockResolvedValue("/Users/demo/skills/write"),
-          copyRepoByPathToDirectory: vi.fn().mockResolvedValue(
-            "/tmp/workspace/.agents/skills/write",
-          ),
+          copyRepoByPathToDirectory: vi
+            .fn()
+            .mockResolvedValue("/tmp/workspace/.agents/skills/write"),
           readLocalFileByPath: vi.fn().mockResolvedValue({
             content: baseSkill.instructions,
           }),
@@ -266,7 +286,9 @@ describe("Skill detail project distribution", () => {
     const setProjectSkillImportModePreference = vi.fn();
 
     await renderProjectDistribution({
-      settingsState: createSettingsState({ setProjectSkillImportModePreference }),
+      settingsState: createSettingsState({
+        setProjectSkillImportModePreference,
+      }),
       skipProjectTabClick: true,
     });
 
@@ -306,15 +328,14 @@ describe("Skill detail project distribution", () => {
     ).toBeInTheDocument();
     expect(uninstallFromPlatform).not.toHaveBeenCalled();
 
-    const uninstallButtons = screen.getAllByRole("button", { name: "Uninstall" });
+    const uninstallButtons = screen.getAllByRole("button", {
+      name: "Uninstall",
+    });
     fireEvent.click(uninstallButtons[uninstallButtons.length - 1]);
 
     await waitFor(() => {
       expect(uninstallFromPlatform).toHaveBeenCalledWith("claude");
-      expect(showToast).toHaveBeenCalledWith(
-        "Uninstall successful",
-        "success",
-      );
+      expect(showToast).toHaveBeenCalledWith("Uninstall successful", "success");
     });
   });
 
@@ -362,6 +383,23 @@ describe("Skill detail project distribution", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Symlink distributions will be deleted directly."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders the source-only delete confirmation hint from the active locale", async () => {
+    currentTranslations = zh as TranslationTree;
+
+    await renderProjectDistribution({ skipProjectTabClick: true });
+
+    fireEvent.click(screen.getByTitle("删除"));
+
+    expect(
+      screen.getByText("只会从 PromptHub 资料库中移除此 Skill。源文件会保留。"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Only removes this skill from the PromptHub library. Source files are preserved.",
+      ),
     ).not.toBeInTheDocument();
   });
 
@@ -469,9 +507,9 @@ describe("Skill detail project distribution", () => {
 
   it("uses repo path and skip semantics when distributing from detail page", async () => {
     const getRepoPath = vi.fn().mockResolvedValue("/Users/demo/skills/write");
-    const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
-      "/tmp/workspace/.agents/skills/write",
-    );
+    const copyRepoByPathToDirectory = vi
+      .fn()
+      .mockResolvedValue("/tmp/workspace/.agents/skills/write");
     const scanProjectSkills = vi.fn().mockResolvedValue([]);
 
     window.api.skill.getRepoPath = getRepoPath;
@@ -500,9 +538,9 @@ describe("Skill detail project distribution", () => {
   });
 
   it("supports advanced project target folders from the detail page", async () => {
-    const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
-      "/tmp/workspace/.claude/skills/write",
-    );
+    const copyRepoByPathToDirectory = vi
+      .fn()
+      .mockResolvedValue("/tmp/workspace/.claude/skills/write");
     window.api.skill.copyRepoByPathToDirectory = copyRepoByPathToDirectory;
 
     await renderProjectDistribution();
@@ -527,9 +565,9 @@ describe("Skill detail project distribution", () => {
   });
 
   it("reuses saved project import target preferences from the detail page", async () => {
-    const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
-      "/tmp/workspace/.gemini/skills/write",
-    );
+    const copyRepoByPathToDirectory = vi
+      .fn()
+      .mockResolvedValue("/tmp/workspace/.gemini/skills/write");
     window.api.skill.copyRepoByPathToDirectory = copyRepoByPathToDirectory;
 
     await renderProjectDistribution({
@@ -631,7 +669,9 @@ describe("Skill detail project distribution", () => {
       }),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove from Project" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove from Project" }),
+    );
     expect(
       screen.getByText(
         "Copied project folders are deleted from the project. Symlink project folders remove only the link.",
@@ -679,14 +719,16 @@ describe("Skill detail project distribution", () => {
   });
 
   it("supports symlink mode with the same skip behavior", async () => {
-    const copyRepoByPathToDirectory = vi.fn().mockResolvedValue(
-      "/tmp/workspace/.agents/skills/write",
-    );
+    const copyRepoByPathToDirectory = vi
+      .fn()
+      .mockResolvedValue("/tmp/workspace/.agents/skills/write");
     const setProjectSkillImportModePreference = vi.fn();
     window.api.skill.copyRepoByPathToDirectory = copyRepoByPathToDirectory;
 
     await renderProjectDistribution({
-      settingsState: createSettingsState({ setProjectSkillImportModePreference }),
+      settingsState: createSettingsState({
+        setProjectSkillImportModePreference,
+      }),
     });
 
     fireEvent.click(
@@ -757,7 +799,9 @@ describe("Skill detail project distribution", () => {
 
   it("warns when background rescan fails after a successful distribution", async () => {
     const showToast = vi.fn();
-    const scanProjectSkills = vi.fn().mockRejectedValue(new Error("rescan failed"));
+    const scanProjectSkills = vi
+      .fn()
+      .mockRejectedValue(new Error("rescan failed"));
 
     await renderProjectDistribution({
       showToast,

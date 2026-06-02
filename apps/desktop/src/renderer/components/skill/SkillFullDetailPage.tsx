@@ -47,7 +47,10 @@ import {
   groupSkillSafetyFindings,
   resolveSkillDescription,
 } from "./detail-utils";
-import { computeSkillContentFingerprint } from "../../services/skill-store-update";
+import {
+  computeSkillContentFingerprint,
+  type RegistrySkillUpdateStatus,
+} from "../../services/skill-store-update";
 import {
   isSkillTranslationStale,
   readSkillTranslationSidecar,
@@ -106,9 +109,11 @@ interface SkillFullDetailPageProps {
   agentContext?: {
     installMode: "copy" | "symlink";
     isManaged?: boolean;
+    isPlatformBuiltin?: boolean;
     platformId: string;
     platformName: string;
     sourcePath: string;
+    symlinkTargetPath?: string;
   } | null;
   projectActions?: {
     isImporting?: boolean;
@@ -126,6 +131,7 @@ interface SkillFullDetailPageProps {
     onImport?: () => void | Promise<void>;
     onOpenFolder?: () => void | Promise<void>;
     onOpenManagedSkill?: () => void | Promise<void>;
+    onOpenSymlinkTarget?: () => void | Promise<void>;
     onUninstall?: () => void | Promise<void>;
   } | null;
   onBack?: () => void;
@@ -152,6 +158,12 @@ export function SkillFullDetailPage({
   const saveSafetyReport = useSkillStore((state) => state.saveSafetyReport);
   const projectScanState = useSkillStore((state) => state.projectScanState);
   const scanProjectSkills = useSkillStore((state) => state.scanProjectSkills);
+  const getInstalledSkillSourceUpdateStatus = useSkillStore(
+    (state) => state.getInstalledSkillSourceUpdateStatus,
+  );
+  const updateInstalledSkillFromSource = useSkillStore(
+    (state) => state.updateInstalledSkillFromSource,
+  );
 
   const selectedSkill = useMemo(() => {
     if (overrideSkill) {
@@ -211,6 +223,10 @@ export function SkillFullDetailPage({
   );
   const [isSnapshotModalOpen, setIsSnapshotModalOpen] = useState(false);
   const [isCreatingSnapshot, setIsCreatingSnapshot] = useState(false);
+  const [isCheckingSourceUpdate, setIsCheckingSourceUpdate] = useState(false);
+  const [isUpdatingSource, setIsUpdatingSource] = useState(false);
+  const [sourceUpdateStatus, setSourceUpdateStatus] =
+    useState<RegistrySkillUpdateStatus | null>(null);
   const [isProjectDeploying, setIsProjectDeploying] = useState(false);
   const [deleteCopyInstallations, setDeleteCopyInstallations] = useState(false);
   const [
@@ -557,6 +573,7 @@ export function SkillFullDetailPage({
       setShowTranslation(false);
       setIsRetranslatePromptOpen(false);
       setTranslationSidecar(null);
+      setSourceUpdateStatus(null);
       setResolvedSkillMdContent(
         selectedSkill.instructions || selectedSkill.content || "",
       );
@@ -899,6 +916,10 @@ export function SkillFullDetailPage({
 
   if (!selectedSkill) return null;
 
+  const hasSourceUpdateMetadata = Boolean(
+    !isExternalDetail && (selectedSkill.source_url || selectedSkill.content_url),
+  );
+  const showApplySourceUpdate = sourceUpdateStatus === "update-available";
   const installedPlatformDetails = Object.values(skillMdInstallDetails).filter(
     (status) => status.installed,
   );
@@ -941,6 +962,106 @@ export function SkillFullDetailPage({
       return null;
     } finally {
       setIsScanningSafety(false);
+    }
+  };
+
+  const showSourceUpdateToast = (status: RegistrySkillUpdateStatus) => {
+    if (status === "update-available") {
+      showToast(t("skill.sourceUpdateAvailable", "Update available"), "info");
+      return;
+    }
+    if (status === "up-to-date") {
+      showToast(t("skill.sourceUpToDate", "Already up to date"), "success");
+      return;
+    }
+    if (status === "local-modified") {
+      showToast(
+        t(
+          "skill.sourceUpdateLocalModified",
+          "Local changes detected. Create a snapshot or review changes before updating.",
+        ),
+        "warning",
+      );
+      return;
+    }
+    if (status === "conflict") {
+      showToast(
+        t(
+          "skill.sourceUpdateConflict",
+          "Source and local content both changed. Review versions before overwriting.",
+        ),
+        "warning",
+      );
+      return;
+    }
+
+    showToast(
+      t("skill.sourceUpdateUnavailable", "No source update target found"),
+      "error",
+    );
+  };
+
+  const handleCheckSourceUpdate = async () => {
+    if (!selectedSkill) return;
+
+    setIsCheckingSourceUpdate(true);
+    try {
+      const check = await getInstalledSkillSourceUpdateStatus(selectedSkill.id);
+      if (!check) {
+        setSourceUpdateStatus(null);
+        showToast(
+          t("skill.sourceUpdateUnavailable", "No source update target found"),
+          "error",
+        );
+        return;
+      }
+
+      setSourceUpdateStatus(check.status);
+      showSourceUpdateToast(check.status);
+    } catch (error) {
+      console.error("Failed to check source updates:", error);
+      showToast(
+        `${t("skill.updateFailed", "Update failed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
+    } finally {
+      setIsCheckingSourceUpdate(false);
+    }
+  };
+
+  const handleUpdateFromSource = async () => {
+    if (!selectedSkill) return;
+
+    setIsUpdatingSource(true);
+    try {
+      const result = await updateInstalledSkillFromSource(selectedSkill.id);
+      if (!result) {
+        showToast(
+          t("skill.sourceUpdateUnavailable", "No source update target found"),
+          "error",
+        );
+        return;
+      }
+      if (result.status !== "updated") {
+        setSourceUpdateStatus(result.check.status);
+        showSourceUpdateToast(result.check.status);
+        return;
+      }
+
+      setSourceUpdateStatus("up-to-date");
+      await loadSkills();
+      showToast(
+        t("skill.sourceUpdateSuccess", "Updated from source"),
+        "success",
+      );
+    } catch (error) {
+      console.error("Failed to update from source:", error);
+      showToast(
+        `${t("skill.updateFailed", "Update failed")}: ${getErrorMessage(error)}`,
+        "error",
+      );
+    } finally {
+      setIsUpdatingSource(false);
     }
   };
 
@@ -1176,6 +1297,11 @@ export function SkillFullDetailPage({
                   {agentContext.platformName}
                 </span>
               ) : null}
+              {agentContext?.isPlatformBuiltin ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[11px] font-medium text-sky-700 dark:text-sky-300">
+                  {t("skill.platformBuiltin", "Built-in")}
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1227,16 +1353,52 @@ export function SkillFullDetailPage({
             <AgentSkillDetailActions
               isImporting={agentActions?.isImporting}
               isManaged={agentContext.isManaged}
+              isUninstallDisabled={agentContext.isPlatformBuiltin}
               isUninstalling={agentActions?.isUninstalling}
               onImport={agentActions?.onImport}
               onOpenFolder={agentActions?.onOpenFolder}
               onOpenManagedSkill={agentActions?.onOpenManagedSkill}
               onUninstall={agentActions?.onUninstall}
               t={t}
+              uninstallDisabledReason={t(
+                "skill.platformBuiltinCannotUninstall",
+                "Built-in skills cannot be removed from this agent.",
+              )}
             />
           ) : null}
           {!isExternalDetail ? (
             <>
+              {hasSourceUpdateMetadata ? (
+                <button
+                  onClick={
+                    showApplySourceUpdate
+                      ? handleUpdateFromSource
+                      : handleCheckSourceUpdate
+                  }
+                  disabled={isCheckingSourceUpdate || isUpdatingSource}
+                  className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-2 text-sm font-medium text-muted-foreground transition-all hover:border-primary/30 hover:bg-primary/5 hover:text-primary disabled:opacity-50"
+                  title={
+                    showApplySourceUpdate
+                      ? t("skill.updateFromSource", "Update from Source")
+                      : t("skill.checkSourceUpdates", "Check Source Updates")
+                  }
+                >
+                  {isCheckingSourceUpdate || isUpdatingSource ? (
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                  ) : showApplySourceUpdate ? (
+                    <RefreshCwIcon className="h-4 w-4" />
+                  ) : (
+                    <CheckCircleIcon className="h-4 w-4" />
+                  )}
+                  {isCheckingSourceUpdate
+                    ? t("skill.checkingUpdates", "Checking")
+                    : isUpdatingSource
+                      ? t("skill.updatingFromSource", "Updating")
+                      : showApplySourceUpdate
+                        ? t("skill.updateFromSource", "Update from Source")
+                        : t("skill.checkSourceUpdates", "Check Updates")}
+                </button>
+              ) : null}
               <button
                 onClick={openSnapshotModal}
                 disabled={isCreatingSnapshot}
@@ -1488,6 +1650,11 @@ export function SkillFullDetailPage({
                       selectedSkill.source_url ||
                       ""
                     }
+                    symlinkTargetPath={
+                      projectContext?.scannedSkill.installMode === "symlink"
+                        ? projectContext.scannedSkill.symlinkTargetPath
+                        : undefined
+                    }
                     t={t}
                   />
                 ) : agentContext ? (
@@ -1497,9 +1664,11 @@ export function SkillFullDetailPage({
                     isManaged={agentContext.isManaged}
                     onImport={agentActions?.onImport}
                     onOpenFolder={agentActions?.onOpenFolder}
+                    onOpenSymlinkTarget={agentActions?.onOpenSymlinkTarget}
                     platformId={agentContext.platformId}
                     platformName={agentContext.platformName}
                     sourcePath={agentContext.sourcePath}
+                    symlinkTargetPath={agentContext.symlinkTargetPath}
                     t={t}
                   />
                 ) : null}

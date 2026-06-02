@@ -404,6 +404,88 @@ describe("skill store", () => {
     ]);
   });
 
+  it("keeps cached skills visible while refreshing with preferCache", async () => {
+    let resolveGetAll: (value: unknown[]) => void = () => undefined;
+    (window as any).api.skill.getAll = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveGetAll = resolve;
+        }),
+    );
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "cached-skill",
+          name: "cached",
+        }),
+      ],
+      isLoading: false,
+    });
+
+    const loadPromise = useSkillStore
+      .getState()
+      .loadSkills({ preferCache: true });
+
+    expect(useSkillStore.getState().isLoading).toBe(false);
+    expect(useSkillStore.getState().skills[0].id).toBe("cached-skill");
+
+    resolveGetAll([
+      createSkillFixture({
+        id: "fresh-skill",
+        name: "fresh",
+      }),
+    ]);
+    await loadPromise;
+
+    expect(useSkillStore.getState().isLoading).toBe(false);
+    expect(useSkillStore.getState().skills[0].id).toBe("fresh-skill");
+  });
+
+  it("deduplicates deployed-status refreshes and keeps force refresh explicit", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-02T08:00:00.000Z"));
+    let resolveStatus: (
+      value: Record<string, Record<string, boolean>>,
+    ) => void = () => undefined;
+    const getMdInstallStatusBatch = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveStatus = resolve;
+        }),
+    );
+    (window as any).api.skill.getMdInstallStatusBatch =
+      getMdInstallStatusBatch;
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-1",
+          name: "alpha",
+        }),
+      ],
+      deployedSkillNames: new Set<string>(),
+    });
+
+    const firstRefresh = useSkillStore.getState().loadDeployedStatus();
+    const secondRefresh = useSkillStore.getState().loadDeployedStatus();
+
+    expect(getMdInstallStatusBatch).toHaveBeenCalledTimes(1);
+    resolveStatus({ "skill-1": { claude: true } });
+    await Promise.all([firstRefresh, secondRefresh]);
+    expect(useSkillStore.getState().deployedSkillNames.has("skill-1")).toBe(
+      true,
+    );
+
+    await useSkillStore.getState().loadDeployedStatus();
+    expect(getMdInstallStatusBatch).toHaveBeenCalledTimes(1);
+
+    getMdInstallStatusBatch.mockResolvedValueOnce({
+      "skill-1": { claude: false },
+    });
+    await useSkillStore.getState().loadDeployedStatus({ force: true });
+    expect(getMdInstallStatusBatch).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
+
   it("prefers install_name over registry slug when importing a registry skill", async () => {
     const create = vi.fn().mockResolvedValue(
       createSkillFixture({
@@ -704,6 +786,100 @@ description: Use this skill for PDF tasks.
         instructions: remoteContent,
         version: "1.1.0",
         installed_version: "1.1.0",
+      }),
+    );
+  });
+
+  it("checks updates for a GitHub-imported skill without a cached store entry", async () => {
+    const remoteContent = "# Writer\n\nRemote update\n";
+    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+
+    const originalHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash("# Writer\n\nOriginal\n");
+
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-github-writer",
+          name: "github-writer",
+          source_id: "github-writer-source",
+          source_url: "https://github.com/example/skills/tree/main/writer",
+          content: "# Writer\n\nOriginal\n",
+          instructions: "# Writer\n\nOriginal\n",
+          installed_content_hash: originalHash,
+          installed_version: "1.0.0",
+        }),
+      ],
+      registrySkills: [],
+      remoteStoreEntries: {},
+    });
+
+    const check = await useSkillStore
+      .getState()
+      .getInstalledSkillSourceUpdateStatus("skill-github-writer");
+
+    expect(check?.status).toBe("update-available");
+    expect(fetchRemoteContent).toHaveBeenCalledWith(
+      "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
+    );
+  });
+
+  it("updates a GitHub-imported skill from its own source metadata without a cached store entry", async () => {
+    const remoteContent = "# Writer\n\nRemote update\n";
+    const fetchRemoteContent = vi.fn().mockResolvedValue(remoteContent);
+    const versionCreate = vi.fn().mockResolvedValue({ id: "version-github" });
+    const update = vi.fn().mockImplementation(async (_id, data) => ({
+      ...createSkillFixture({ id: "skill-github-writer", name: "github-writer" }),
+      ...data,
+      id: "skill-github-writer",
+      updated_at: 2,
+    }));
+
+    (window as any).api.skill.fetchRemoteContent = fetchRemoteContent;
+    (window as any).api.skill.versionCreate = versionCreate;
+    (window as any).api.skill.update = update;
+
+    const originalHash = await useSkillStore
+      .getState()
+      .computeRegistrySkillHash("# Writer\n\nOriginal\n");
+
+    useSkillStore.setState({
+      skills: [
+        createSkillFixture({
+          id: "skill-github-writer",
+          name: "github-writer",
+          source_id: "github-writer-source",
+          source_url: "https://github.com/example/skills/tree/main/writer",
+          content: "# Writer\n\nOriginal\n",
+          instructions: "# Writer\n\nOriginal\n",
+          installed_content_hash: originalHash,
+          installed_version: "1.0.0",
+        }),
+      ],
+      registrySkills: [],
+      remoteStoreEntries: {},
+    });
+
+    const result = await useSkillStore
+      .getState()
+      .updateInstalledSkillFromSource("skill-github-writer");
+
+    expect(result?.status).toBe("updated");
+    expect(versionCreate).toHaveBeenCalledWith(
+      "skill-github-writer",
+      expect.stringContaining("Source update"),
+    );
+    expect(update).toHaveBeenCalledWith(
+      "skill-github-writer",
+      expect.objectContaining({
+        content: remoteContent,
+        instructions: remoteContent,
+        source_url: "https://github.com/example/skills/tree/main/writer",
+        content_url:
+          "https://raw.githubusercontent.com/example/skills/main/writer/SKILL.md",
+        installed_version: "source",
       }),
     );
   });

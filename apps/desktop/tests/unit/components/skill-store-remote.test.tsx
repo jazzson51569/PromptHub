@@ -1586,6 +1586,112 @@ describe("SkillStore remote loading", () => {
     expect(installRegistrySkill).not.toHaveBeenCalled();
   });
 
+  it("shows the update action only after an update check finds a store update", async () => {
+    const getRegistrySkillUpdateStatus = vi
+      .fn()
+      .mockResolvedValue({ status: "update-available" });
+    const updateRegistrySkill = vi
+      .fn()
+      .mockResolvedValue({ status: "updated" });
+    useSkillStore.setState({
+      getRegistrySkillUpdateStatus,
+      updateRegistrySkill,
+      getTranslationState: vi.fn().mockReturnValue({
+        value: null,
+        hasTranslation: false,
+        isStale: false,
+      }),
+    } as never);
+
+    await renderWithI18n(
+      <SkillStoreDetail
+        skill={makeRegistrySkill("update-ready", {
+          content_url: "https://example.com/update-ready/SKILL.md",
+        })}
+        isInstalled
+        onClose={vi.fn()}
+      />,
+      { language: "en" },
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Check update/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Update$/i }),
+    ).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Check update/i }));
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Recheck update/i }),
+      ).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /^Update$/i }));
+    });
+
+    expect(updateRegistrySkill).toHaveBeenCalledWith("source-update-ready", {
+      overwriteLocalChanges: false,
+    });
+  });
+
+  it("opens the installed My Skills detail from the imported status action", async () => {
+    const onClose = vi.fn();
+    useSkillStore.setState({
+      skills: [
+        {
+          id: "installed-algorithmic-art",
+          name: "algorithmic-art",
+          protocol_type: "skill",
+          source_id: "source-algorithmic-art",
+          source_url: "https://example.com/algorithmic-art",
+          content_url: "https://example.com/algorithmic-art/SKILL.md",
+          instructions: "# Installed algorithmic art",
+          content: "# Installed algorithmic art",
+          tags: [],
+          is_favorite: false,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+      storeView: "store",
+      selectedSkillId: null,
+      getTranslationState: vi.fn().mockReturnValue({
+        value: null,
+        hasTranslation: false,
+        isStale: false,
+      }),
+    } as never);
+
+    await renderWithI18n(
+      <SkillStoreDetail
+        skill={makeRegistrySkill("algorithmic-art", {
+          content_url: "https://example.com/algorithmic-art/SKILL.md",
+        })}
+        isInstalled
+        onClose={onClose}
+      />,
+      { language: "en" },
+    );
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Open in My Skills/i }),
+      );
+    });
+
+    expect(useSkillStore.getState().storeView).toBe("my-skills");
+    expect(useSkillStore.getState().selectedSkillId).toBe(
+      "installed-algorithmic-art",
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("does not collapse store detail when the backdrop is clicked", async () => {
     const onClose = vi.fn();
     useSkillStore.setState({

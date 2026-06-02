@@ -6,7 +6,7 @@ import {
   computeRepoDirectoryFingerprint,
 } from "../../services/skill-repo-sync";
 import type { SkillIPCContext } from "./shared";
-import { ensureLocalRepoPath, readCurrentFilesSnapshot } from "./shared";
+import { ensureLocalRepoPath } from "./shared";
 
 async function resolveManagedRepoPath(
   context: SkillIPCContext,
@@ -38,20 +38,6 @@ async function resolveManagedRepoPath(
     context.db.update(skillId, { local_repo_path: managedRepoPath });
   }
   return managedRepoPath;
-}
-
-async function createVersionSnapshotIfNeeded(
-  context: SkillIPCContext,
-  skillId: string,
-  note: string,
-): Promise<void> {
-  const skill = context.db.getById(skillId);
-  if (!skill) {
-    return;
-  }
-
-  const filesSnapshot = await readCurrentFilesSnapshot(context.db, skillId);
-  context.db.createVersion(skillId, note, filesSnapshot, skill);
 }
 
 async function syncSkillContentFromRepo(
@@ -274,11 +260,6 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         );
       }
       const repoPath = await resolveManagedRepoPath({ db }, skillId);
-      await createVersionSnapshotIfNeeded(
-        { db },
-        skillId,
-        `Before renaming ${oldRelativePath} to ${newRelativePath}`,
-      );
       const result = await SkillInstaller.renameLocalRepoPathByPath(
         repoPath,
         oldRelativePath,
@@ -344,13 +325,6 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         throw new Error("skill:writeLocalFile requires a non-empty skillId");
       }
       const repoPath = await resolveManagedRepoPath({ db }, skillId);
-      if (!options?.skipVersionSnapshot) {
-        await createVersionSnapshotIfNeeded(
-          { db },
-          skillId,
-          `Before updating ${relativePath}`,
-        );
-      }
       const result = await SkillInstaller.writeLocalRepoFileByPath(
         repoPath,
         relativePath,
@@ -425,11 +399,6 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         throw new Error("skill:deleteLocalFile requires a non-empty skillId");
       }
       const repoPath = await resolveManagedRepoPath({ db }, skillId);
-      await createVersionSnapshotIfNeeded(
-        { db },
-        skillId,
-        `Before deleting ${relativePath}`,
-      );
       const result = await SkillInstaller.deleteLocalRepoFileByPath(
         repoPath,
         relativePath,
@@ -475,11 +444,6 @@ export function registerSkillLocalRepoHandlers({ db }: SkillIPCContext): void {
         throw new Error("skill:createLocalDir requires a non-empty skillId");
       }
       const repoPath = await resolveManagedRepoPath({ db }, skillId);
-      await createVersionSnapshotIfNeeded(
-        { db },
-        skillId,
-        `Before creating directory ${relativePath}`,
-      );
       return SkillInstaller.createLocalRepoDirByPath(repoPath, relativePath);
     },
   );

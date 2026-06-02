@@ -98,6 +98,18 @@ const claudePlatform = {
   skillsRelativePath: "skills",
 };
 
+const cherryPlatform = {
+  id: "cherry-studio",
+  name: "Cherry Studio",
+  icon: "Bot",
+  rootDir: {
+    darwin: "~/Library/Application Support/CherryStudio",
+    win32: "%APPDATA%\\CherryStudio",
+    linux: "~/.config/CherryStudio",
+  },
+  skillsRelativePath: "Data/Skills",
+};
+
 function scanResult() {
   return {
     platform: claudePlatform,
@@ -127,6 +139,30 @@ function scanResult() {
         platformSkillPath: "/agents/claude/skills/linked-skill",
         platforms: ["Claude Code"],
         installMode: "symlink" as const,
+        symlinkTargetPath: "/external/feishu/skills/linked-skill",
+        isPromptHubManagedLink: false,
+      },
+    ],
+  };
+}
+
+function cherryBuiltinScanResult() {
+  return {
+    platform: cherryPlatform,
+    skillsDir: "/agents/cherry/Data/Skills",
+    scannedSkills: [
+      {
+        name: "find-skills",
+        description: "Helps users discover and install skills",
+        author: "Cherry Studio",
+        tags: [],
+        instructions: "# Find Skills",
+        filePath: "/agents/cherry/Data/Skills/find-skills/SKILL.md",
+        localPath: "/agents/cherry/Data/Skills/find-skills",
+        platformSkillPath: "/agents/cherry/Data/Skills/find-skills",
+        platforms: ["Cherry Studio"],
+        installMode: "copy" as const,
+        isPlatformBuiltin: true,
       },
     ],
   };
@@ -235,8 +271,7 @@ describe("SkillAgentsView", () => {
       0,
     );
     expect(screen.getAllByText("linked-skill").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Copy install").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Symlink install").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("External install").length).toBeGreaterThan(0);
     expect(screen.getAllByText("In My Skills").length).toBeGreaterThan(0);
     expect(
       screen.getByText(
@@ -252,8 +287,30 @@ describe("SkillAgentsView", () => {
     expect(useUIStore.getState().pendingSettingsSection).toBe("skill");
     expect(screen.getAllByText("2 skills")).toHaveLength(2);
     expect(screen.getByText("1 managed")).toBeInTheDocument();
-    expect(screen.getByText("1 copy")).toBeInTheDocument();
-    expect(screen.getByText("1 symlink")).toBeInTheDocument();
+    expect(screen.getByText("1 unmanaged")).toBeInTheDocument();
+    expect(screen.getByText("0 copy")).toBeInTheDocument();
+    expect(screen.getByText("0 symlink")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("agent-skill-filter-managed"));
+    expect(screen.getByTestId("agent-skill-filter-managed")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getAllByTestId("agent-skill-card")).toHaveLength(1);
+    expect(screen.getByText("linked-skill")).toBeInTheDocument();
+    expect(screen.queryByText("copy-skill")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("agent-skill-filter-unmanaged"));
+    expect(screen.getByTestId("agent-skill-filter-unmanaged")).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(screen.getAllByTestId("agent-skill-card")).toHaveLength(1);
+    expect(screen.getByText("copy-skill")).toBeInTheDocument();
+    expect(screen.queryByText("linked-skill")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("agent-skill-filter-copy"));
+    expect(screen.queryAllByTestId("agent-skill-card")).toHaveLength(0);
+    expect(screen.getByText("No skills in this agent")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("agent-skill-filter-all"));
+    expect(screen.getAllByTestId("agent-skill-card")).toHaveLength(2);
     expect(screen.getByTestId("agent-sidebar-header")).toHaveClass("h-[132px]");
     expect(screen.getByTestId("agent-detail-header")).toHaveClass("h-[132px]");
     expect(screen.getByTestId("agent-detail-shell")).toHaveClass(
@@ -303,6 +360,153 @@ describe("SkillAgentsView", () => {
       screen.getAllByRole("button", { name: /Uninstall from agent/i }).length,
     ).toBeGreaterThan(0);
     expect(screen.queryByText("# Copy Skill")).not.toBeInTheDocument();
+  });
+
+  it("shows a source-target action for external symlink agent skills", async () => {
+    const { electron } = installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([claudePlatform]),
+          detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
+          scanPlatformSkills: vi.fn().mockResolvedValue(scanResult()),
+          uninstallPlatformSkill: vi.fn().mockResolvedValue(undefined),
+          export: vi.fn().mockResolvedValue("# Linked Skill"),
+          readLocalFileByPath: vi
+            .fn()
+            .mockResolvedValue({ content: "# Linked Skill" }),
+        },
+      },
+      electron: {
+        openPath: vi.fn(),
+      },
+    });
+
+    render(<SkillAgentsView />);
+
+    fireEvent.click(await screen.findByText("linked-skill"));
+
+    const shortcutButton = await screen.findByRole("button", {
+      name: /Open agent shortcut/i,
+    });
+    expect(shortcutButton).toHaveTextContent(
+      "/agents/claude/skills/linked-skill",
+    );
+
+    fireEvent.click(shortcutButton);
+
+    await waitFor(() => {
+      expect(electron.openPath).toHaveBeenCalledWith(
+        "/agents/claude/skills/linked-skill",
+      );
+    });
+
+    const sourceTargetButton = await screen.findByRole("button", {
+      name: /Open source Skill folder/i,
+    });
+    expect(sourceTargetButton).toHaveTextContent(
+      "/external/feishu/skills/linked-skill",
+    );
+
+    fireEvent.click(sourceTargetButton);
+
+    await waitFor(() => {
+      expect(electron.openPath).toHaveBeenCalledWith(
+        "/external/feishu/skills/linked-skill",
+      );
+    });
+  });
+
+  it("treats unmatched symlink agent skills without managed metadata as external", async () => {
+    const legacySymlinkScan = {
+      platform: claudePlatform,
+      skillsDir: "/agents/claude/skills",
+      scannedSkills: [
+        {
+          name: "legacy-linked",
+          description: "Legacy linked skill without managed metadata",
+          author: "External",
+          tags: [],
+          instructions: "# Legacy Linked",
+          filePath: "/agents/claude/skills/legacy-linked/SKILL.md",
+          localPath: "/agents/claude/skills/legacy-linked",
+          platformSkillPath: "/agents/claude/skills/legacy-linked",
+          platforms: ["Claude Code"],
+          installMode: "symlink" as const,
+          symlinkTargetPath: "/external/legacy/skills/legacy-linked",
+        },
+      ],
+    };
+
+    installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([claudePlatform]),
+          detectPlatforms: vi.fn().mockResolvedValue(["claude"]),
+          scanPlatformSkills: vi.fn().mockResolvedValue(legacySymlinkScan),
+          uninstallPlatformSkill: vi.fn().mockResolvedValue(undefined),
+          readLocalFileByPath: vi
+            .fn()
+            .mockResolvedValue({ content: "# Legacy Linked" }),
+        },
+      },
+      electron: {
+        openPath: vi.fn(),
+      },
+    });
+    useSkillStore.setState({
+      skills: [],
+      agentScanState: {
+        claude: {
+          result: legacySymlinkScan,
+          isScanning: false,
+          scannedAt: 1,
+          error: null,
+        },
+      },
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    render(<SkillAgentsView />);
+
+    expect(await screen.findByText("legacy-linked")).toBeInTheDocument();
+    expect(screen.queryByText("Symlink install")).not.toBeInTheDocument();
+    expect(screen.getByText("External install")).toBeInTheDocument();
+  });
+
+  it("does not treat same-name agent skills as managed when stable identity differs", async () => {
+    useSkillStore.setState({
+      skills: [
+        {
+          id: "same-name-library",
+          name: "copy-skill",
+          description: "Different library skill with same name",
+          instructions: "# Different Copy Skill",
+          content: "# Different Copy Skill",
+          protocol_type: "skill",
+          author: "PromptHub",
+          local_repo_path: "/library/different-copy-skill",
+          directory_fingerprint: "different-fingerprint",
+          tags: ["library"],
+          is_favorite: false,
+          created_at: 1,
+          updated_at: 1,
+        },
+      ],
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    render(<SkillAgentsView />);
+
+    expect(await screen.findByText("copy-skill")).toBeInTheDocument();
+    const copyCard = screen
+      .getAllByTestId("agent-skill-card")
+      .find((card) => within(card).queryByText("copy-skill"));
+    expect(copyCard).toBeTruthy();
+    expect(
+      within(copyCard!).queryByText("In My Skills"),
+    ).not.toBeInTheDocument();
+    expect(within(copyCard!).getByText("External install")).toBeInTheDocument();
+    expect(
+      within(copyCard!).queryByText("Copy install"),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps entry passive but auto-scans an uncached agent when the user selects it", async () => {
@@ -394,7 +598,6 @@ describe("SkillAgentsView", () => {
         },
       },
     });
-
     render(<SkillAgentsView />);
 
     fireEvent.click((await screen.findAllByText("copy-skill"))[0]);
@@ -427,7 +630,6 @@ describe("SkillAgentsView", () => {
         openPath: vi.fn(),
       },
     });
-
     render(<SkillAgentsView />);
 
     const copyCard = (await screen.findAllByTestId("agent-skill-card")).find(
@@ -447,6 +649,71 @@ describe("SkillAgentsView", () => {
       );
     });
     expect(api.skill.scanPlatformSkills).toHaveBeenCalledTimes(1);
+  });
+
+  it("marks Cherry Studio built-in skills and prevents deleting them", async () => {
+    const { api } = installWindowMocks({
+      api: {
+        skill: {
+          getSupportedPlatforms: vi.fn().mockResolvedValue([cherryPlatform]),
+          detectPlatforms: vi.fn().mockResolvedValue(["cherry-studio"]),
+          scanPlatformSkills: vi
+            .fn()
+            .mockResolvedValue(cherryBuiltinScanResult()),
+          uninstallPlatformSkill: vi.fn().mockResolvedValue(undefined),
+          readLocalFileByPath: vi
+            .fn()
+            .mockResolvedValue({ content: "# Find Skills" }),
+        },
+      },
+      electron: {
+        openPath: vi.fn(),
+      },
+    });
+    useSettingsStore.setState({
+      skillPlatformOrder: ["cherry-studio"],
+      disabledPlatformIds: [],
+    } as Partial<ReturnType<typeof useSettingsStore.getState>>);
+    useSkillStore.setState({
+      agentScanState: {
+        "cherry-studio": {
+          result: cherryBuiltinScanResult(),
+          isScanning: false,
+          scannedAt: 1,
+          error: null,
+        },
+      },
+    } as Partial<ReturnType<typeof useSkillStore.getState>>);
+
+    render(<SkillAgentsView />);
+
+    const builtinCard = (await screen.findAllByTestId("agent-skill-card")).find(
+      (card) => within(card).queryByText("find-skills"),
+    );
+    expect(builtinCard).toBeTruthy();
+    expect(within(builtinCard!).getByText("Built-in")).toBeInTheDocument();
+    expect(
+      within(builtinCard!).getByText("External install"),
+    ).toBeInTheDocument();
+    expect(
+      within(builtinCard!).queryByText("Copy install"),
+    ).not.toBeInTheDocument();
+
+    const cardUninstall = within(builtinCard!).getByRole("button", {
+      name: /Uninstall from agent/i,
+    });
+    expect(cardUninstall).toBeDisabled();
+
+    fireEvent.click(cardUninstall);
+    expect(screen.queryByText("confirm-uninstall")).not.toBeInTheDocument();
+    expect(api.skill.uninstallPlatformSkill).not.toHaveBeenCalled();
+
+    fireEvent.click(within(builtinCard!).getByText("find-skills"));
+
+    const detailUninstall = await screen.findByRole("button", {
+      name: /Uninstall/i,
+    });
+    expect(detailUninstall).toBeDisabled();
   });
 
   it("imports an unmanaged agent skill into My Skills from the card action", async () => {

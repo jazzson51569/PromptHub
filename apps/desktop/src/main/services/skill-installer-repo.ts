@@ -40,6 +40,8 @@ const MAX_WALK_DEPTH = 5;
 const MAX_WALK_FILES = 500;
 /** Maximum file size (1 MB) for reading text content */
 const MAX_FILE_SIZE_BYTES = 1_048_576;
+/** Maximum file size (5 MB) for inline resource preview data */
+const MAX_PREVIEW_FILE_SIZE_BYTES = 5 * 1_048_576;
 
 /**
  * Text file extensions recognized for content reading (all lowercase).
@@ -77,6 +79,31 @@ const TEXT_EXTENSIONS = new Set([
   ".rs",
 ]);
 
+const PREVIEW_MIME_TYPES = new Map<
+  string,
+  { mimeType: string; previewKind: "image" | "audio" | "video" | "pdf" }
+>([
+  [".svg", { mimeType: "image/svg+xml", previewKind: "image" }],
+  [".png", { mimeType: "image/png", previewKind: "image" }],
+  [".jpg", { mimeType: "image/jpeg", previewKind: "image" }],
+  [".jpeg", { mimeType: "image/jpeg", previewKind: "image" }],
+  [".gif", { mimeType: "image/gif", previewKind: "image" }],
+  [".webp", { mimeType: "image/webp", previewKind: "image" }],
+  [".avif", { mimeType: "image/avif", previewKind: "image" }],
+  [".bmp", { mimeType: "image/bmp", previewKind: "image" }],
+  [".ico", { mimeType: "image/x-icon", previewKind: "image" }],
+  [".mp3", { mimeType: "audio/mpeg", previewKind: "audio" }],
+  [".wav", { mimeType: "audio/wav", previewKind: "audio" }],
+  [".ogg", { mimeType: "audio/ogg", previewKind: "audio" }],
+  [".m4a", { mimeType: "audio/mp4", previewKind: "audio" }],
+  [".flac", { mimeType: "audio/flac", previewKind: "audio" }],
+  [".mp4", { mimeType: "video/mp4", previewKind: "video" }],
+  [".webm", { mimeType: "video/webm", previewKind: "video" }],
+  [".ogv", { mimeType: "video/ogg", previewKind: "video" }],
+  [".mov", { mimeType: "video/quicktime", previewKind: "video" }],
+  [".pdf", { mimeType: "application/pdf", previewKind: "pdf" }],
+]);
+
 const INTERNAL_REPO_DIRS = new Set([".git", ".prompthub"]);
 
 interface SkillVariantSourceMetadata {
@@ -103,6 +130,13 @@ const MANAGED_REPO_DIRNAME = "repo";
 const INTERNAL_METADATA_DIRNAME = ".prompthub";
 const SOURCE_METADATA_FILE = "source.json";
 const VARIANT_METADATA_FILE = "variant.json";
+
+function normalizeRepoRelativePath(relativePath: string): string {
+  return relativePath
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .replace(/\/+/g, "/");
+}
 
 function normalizeRepoBaseDirectory(absolutePath: string): string {
   return /[\\/]SKILL\.md$/i.test(absolutePath)
@@ -284,7 +318,9 @@ async function walkRepoDir<T>(opts: {
       if (!isPathWithin(realBasePath, realFullPath)) {
         continue;
       }
-      const relativePath = path.relative(baseDir, fullPath);
+      const relativePath = normalizeRepoRelativePath(
+        path.relative(baseDir, fullPath),
+      );
       const isDirectory = dirent.isDirectory();
 
       if (isInternalSkillRepoEntry(relativePath)) {
@@ -318,16 +354,38 @@ async function walkRepoDir<T>(opts: {
 async function readFileContent(
   fullPath: string,
   fileName: string,
-): Promise<string> {
+  options?: { includePreviewData?: boolean },
+): Promise<
+  Pick<SkillLocalFileEntry, "content" | "mimeType" | "encoding" | "previewKind">
+> {
   const ext = path.extname(fileName).toLowerCase();
-  if (!TEXT_EXTENSIONS.has(ext)) {
-    return "[binary file]";
-  }
   const stat = await fs.stat(fullPath);
-  if (stat.size > MAX_FILE_SIZE_BYTES) {
-    return "[file too large]";
+
+  if (TEXT_EXTENSIONS.has(ext)) {
+    if (stat.size > MAX_FILE_SIZE_BYTES) {
+      return { content: "[file too large]", encoding: "placeholder" };
+    }
+    return { content: await fs.readFile(fullPath, "utf-8"), encoding: "text" };
   }
-  return fs.readFile(fullPath, "utf-8");
+
+  const previewType = PREVIEW_MIME_TYPES.get(ext);
+  if (options?.includePreviewData && previewType) {
+    if (stat.size > MAX_PREVIEW_FILE_SIZE_BYTES) {
+      return {
+        content: "[file too large]",
+        encoding: "placeholder",
+        ...previewType,
+      };
+    }
+    const data = await fs.readFile(fullPath);
+    return {
+      content: `data:${previewType.mimeType};base64,${data.toString("base64")}`,
+      encoding: "data-url",
+      ...previewType,
+    };
+  }
+
+  return { content: "[binary file]", encoding: "placeholder" };
 }
 
 // ==================== Managed path check ====================
@@ -531,8 +589,12 @@ export async function readLocalRepoFiles(
       if (isDirectory) {
         return { path: relativePath, content: "", isDirectory: true };
       }
-      const content = await readFileContent(fullPath, dirent.name);
-      return { path: relativePath, content, isDirectory: false };
+      const contentInfo = await readFileContent(fullPath, dirent.name);
+      return {
+        path: relativePath,
+        content: contentInfo.content,
+        isDirectory: false,
+      };
     },
   });
 }
@@ -563,8 +625,8 @@ export async function readLocalRepoFilesByPath(
       if (isDirectory) {
         return { path: relativePath, content: "", isDirectory: true };
       }
-      const content = await readFileContent(fullPath, dirent.name);
-      return { path: relativePath, content, isDirectory: false };
+      const contentInfo = await readFileContent(fullPath, dirent.name);
+      return { path: relativePath, ...contentInfo, isDirectory: false };
     },
   });
 }
@@ -652,9 +714,10 @@ export async function readLocalRepoFileByPath(
   relativePath: string,
 ): Promise<SkillLocalFileEntry | null> {
   const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const normalizedRelativePath = normalizeRepoRelativePath(relativePath);
   const { fullPath, realBasePath } = await resolveRepoTargetPath(
     normalizedBasePath,
-    relativePath,
+    normalizedRelativePath,
     { allowOutsideSkillsDir: true },
   );
   if (!(await fileExists(fullPath))) {
@@ -671,14 +734,18 @@ export async function readLocalRepoFileByPath(
   }
   const stat = await fs.stat(fullPath);
   if (stat.isDirectory()) {
-    return { path: relativePath, content: "", isDirectory: true };
+    return { path: normalizedRelativePath, content: "", isDirectory: true };
   }
 
-  const content = await readFileContent(fullPath, path.basename(relativePath));
+  const content = await readFileContent(
+    fullPath,
+    path.basename(normalizedRelativePath),
+    { includePreviewData: true },
+  );
 
   return {
-    path: relativePath,
-    content,
+    path: normalizedRelativePath,
+    ...content,
     isDirectory: false,
   };
 }
@@ -735,9 +802,10 @@ export async function writeLocalRepoFileByPath(
 ): Promise<void> {
   await initSkillsDir();
   const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const normalizedRelativePath = normalizeRepoRelativePath(relativePath);
   const { fullPath } = await resolveRepoTargetPath(
     normalizedBasePath,
-    relativePath,
+    normalizedRelativePath,
     { ensureBaseExists: true, allowOutsideSkillsDir: true },
   );
   await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -751,9 +819,10 @@ export async function writeLocalRepoFileBufferByPath(
 ): Promise<void> {
   await initSkillsDir();
   const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const normalizedRelativePath = normalizeRepoRelativePath(relativePath);
   const { fullPath } = await resolveRepoTargetPath(
     normalizedBasePath,
-    relativePath,
+    normalizedRelativePath,
     { ensureBaseExists: true, allowOutsideSkillsDir: true },
   );
   await fs.mkdir(path.dirname(fullPath), { recursive: true });
@@ -784,9 +853,10 @@ export async function deleteLocalRepoFileByPath(
   relativePath: string,
 ): Promise<void> {
   const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const normalizedRelativePath = normalizeRepoRelativePath(relativePath);
   const { fullPath } = await resolveRepoTargetPath(
     normalizedBasePath,
-    relativePath,
+    normalizedRelativePath,
     { allowOutsideSkillsDir: true },
   );
   await fs.rm(fullPath, { recursive: true, force: true });
@@ -804,15 +874,20 @@ export async function createLocalRepoDir(
 ): Promise<void> {
   const skillsDir = getSkillsDirAccessor();
   validateSkillName(skillName);
-  validateRelativePath(relativePath);
+  const normalizedRelativePath = normalizeRepoRelativePath(relativePath);
+  validateRelativePath(normalizedRelativePath);
   await initSkillsDir();
 
   const basePath = path.join(skillsDir, skillName);
   // Ensure the skill base directory exists first
   await fs.mkdir(basePath, { recursive: true });
-  const { fullPath } = await resolveRepoTargetPath(basePath, relativePath, {
-    ensureBaseExists: true,
-  });
+  const { fullPath } = await resolveRepoTargetPath(
+    basePath,
+    normalizedRelativePath,
+    {
+      ensureBaseExists: true,
+    },
+  );
   await fs.mkdir(fullPath, { recursive: true });
 }
 
@@ -825,9 +900,10 @@ export async function createLocalRepoDirByPath(
 ): Promise<void> {
   await initSkillsDir();
   const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const normalizedRelativePath = normalizeRepoRelativePath(relativePath);
   const { fullPath } = await resolveRepoTargetPath(
     normalizedBasePath,
-    relativePath,
+    normalizedRelativePath,
     { ensureBaseExists: true, allowOutsideSkillsDir: true },
   );
   await fs.mkdir(fullPath, { recursive: true });
@@ -841,14 +917,16 @@ export async function renameLocalRepoPathByPath(
   newRelativePath: string,
 ): Promise<void> {
   const normalizedBasePath = normalizeRepoBaseDirectory(absoluteBasePath);
+  const normalizedOldRelativePath = normalizeRepoRelativePath(oldRelativePath);
+  const normalizedNewRelativePath = normalizeRepoRelativePath(newRelativePath);
   const { fullPath: oldFullPath } = await resolveRepoTargetPath(
     normalizedBasePath,
-    oldRelativePath,
+    normalizedOldRelativePath,
     { allowOutsideSkillsDir: true },
   );
   const { fullPath: newFullPath } = await resolveRepoTargetPath(
     normalizedBasePath,
-    newRelativePath,
+    normalizedNewRelativePath,
     { ensureBaseExists: true, allowOutsideSkillsDir: true },
   );
 

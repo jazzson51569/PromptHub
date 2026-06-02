@@ -154,6 +154,8 @@ function createSkillStoreState(
     loadDeployedStatus: vi.fn().mockResolvedValue(undefined),
     filterTags: [],
     installRegistrySkill: vi.fn().mockResolvedValue(undefined),
+    getInstalledSkillSourceUpdateStatus: vi.fn().mockResolvedValue(null),
+    updateInstalledSkillFromSource: vi.fn().mockResolvedValue(null),
     scanLocalPreview: vi.fn().mockResolvedValue([]),
     selectRegistrySkill: vi.fn(),
     selectedRegistrySlug: null,
@@ -545,6 +547,65 @@ describe("skill i18n smoke", () => {
     expect(selectSkill).toHaveBeenCalledWith(null);
   });
 
+  it("filters My Skills by source badge from the header dropdown", async () => {
+    const skillStoreState = createSkillStoreState({
+      skills: [
+        {
+          ...baseSkill,
+          id: "skill-claude",
+          name: "claude-store-skill",
+          source_label: "anthropics/skills",
+          source_url:
+            "https://github.com/anthropics/skills/tree/main/skills/writer",
+        },
+        {
+          ...baseSkill,
+          id: "skill-github",
+          name: "github-import-skill",
+          registry_slug: undefined,
+          installed_version: undefined,
+          source_label: undefined,
+          source_url: "https://github.com/demo/skills/tree/main/writer",
+        },
+        {
+          ...baseSkill,
+          id: "skill-agent",
+          name: "agent-import-skill",
+          registry_slug: undefined,
+          installed_version: undefined,
+          source_label: "Claude Code",
+          source_url: "/Users/demo/.claude/skills/agent-import-skill",
+        },
+      ],
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
+
+    render(<SkillManager />);
+
+    expect(screen.getByText("claude-store-skill")).toBeInTheDocument();
+    expect(screen.getByText("github-import-skill")).toBeInTheDocument();
+    expect(screen.getByText("agent-import-skill")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Skill source" }));
+    fireEvent.click(screen.getByRole("button", { name: /GitHub Import\s*1/i }));
+
+    expect(screen.queryByText("claude-store-skill")).not.toBeInTheDocument();
+    expect(screen.getByText("github-import-skill")).toBeInTheDocument();
+    expect(screen.queryByText("agent-import-skill")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Skill source" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /Claude Code Store\s*1/i }),
+    );
+
+    expect(screen.getByText("claude-store-skill")).toBeInTheDocument();
+    expect(screen.queryByText("github-import-skill")).not.toBeInTheDocument();
+    expect(screen.queryByText("agent-import-skill")).not.toBeInTheDocument();
+  });
+
   it("shows an update pulse for store-installed skills when a remote store version is newer", async () => {
     const skillStoreState = createSkillStoreState({
       remoteStoreEntries: {
@@ -656,6 +717,78 @@ describe("skill i18n smoke", () => {
     expect(screen.getByText("Imported from Local Folder")).toBeInTheDocument();
     expect(screen.queryByText("源码/内容")).not.toBeInTheDocument();
     expect(screen.queryByText("批量管理")).not.toBeInTheDocument();
+  });
+
+  it("checks and applies source updates from installed GitHub skill detail", async () => {
+    const githubSkill = {
+      ...baseSkill,
+      source_url: "https://github.com/example/skills/tree/main/write",
+      content_url:
+        "https://raw.githubusercontent.com/example/skills/main/write/SKILL.md",
+    };
+    const updateCheck = {
+      status: "update-available",
+      installedSkill: githubSkill,
+      registrySkill: {
+        slug: "write",
+        name: "write",
+        description: "Write better",
+        category: "general",
+        author: "PromptHub",
+        source_url: githubSkill.source_url,
+        content_url: githubSkill.content_url,
+        tags: ["general"],
+        version: "source",
+        content: "# Write\n\nRemote",
+      },
+      remoteHash: "remote-hash",
+      remoteContent: "# Write\n\nRemote",
+      localModified: false,
+      remoteChanged: true,
+    };
+    const getInstalledSkillSourceUpdateStatus = vi
+      .fn()
+      .mockResolvedValue(updateCheck);
+    const updateInstalledSkillFromSource = vi.fn().mockResolvedValue({
+      status: "updated",
+      skill: githubSkill,
+      check: { ...updateCheck, status: "up-to-date" },
+    });
+    const skillStoreState = createSkillStoreState({
+      skills: [githubSkill],
+      selectedSkillId: githubSkill.id,
+      getInstalledSkillSourceUpdateStatus,
+      updateInstalledSkillFromSource,
+    });
+    const settingsState = createSettingsState();
+
+    useSkillStoreMock.mockImplementation(bindStoreSelector(skillStoreState));
+    useSettingsStoreMock.mockImplementation(bindStoreSelector(settingsState));
+
+    await act(async () => {
+      render(<SkillFullDetailPage />);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Check Updates" }));
+
+    await waitFor(() => {
+      expect(getInstalledSkillSourceUpdateStatus).toHaveBeenCalledWith(
+        githubSkill.id,
+      );
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Update from Source" }),
+      ).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Update from Source" }));
+
+    await waitFor(() => {
+      expect(updateInstalledSkillFromSource).toHaveBeenCalledWith(
+        githubSkill.id,
+      );
+    });
   });
 
   it("shows project deployment actions for normal library skills", async () => {
