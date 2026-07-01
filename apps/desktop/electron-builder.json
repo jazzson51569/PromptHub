@@ -3,7 +3,7 @@
   "appId": "com.prompthub.app",
   "productName": "PromptHub",
   "directories": {
-    "output": "dist_new21",
+    "output": "dist",
     "buildResources": "resources"
   },
   "extraMetadata": {
