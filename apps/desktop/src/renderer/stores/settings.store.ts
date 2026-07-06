@@ -437,6 +437,18 @@ function normalizePromptTagCatalog(value: unknown): string[] {
   ).sort((a, b) => a.localeCompare(b));
 }
 
+function normalizeCollapsedPromptIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      value.filter((id): id is string => typeof id === "string"),
+    ),
+  );
+}
+
 function inferAIProtocol(
   provider: string | undefined,
   apiUrl: string | undefined,
@@ -1237,6 +1249,7 @@ interface SettingsState {
   showSaveNotification: boolean;
   tagFilterMode: TagFilterMode;
   promptTagCatalog: string[];
+  collapsedPromptIds: string[];
 
   language: SupportedLanguage; // zh, zh-TW, en, ja, es, de, fr
 
@@ -1375,6 +1388,8 @@ interface SettingsState {
   addPromptTagCatalogEntry: (tag: string) => void;
   renamePromptTagCatalogEntry: (oldTag: string, newTag: string) => void;
   deletePromptTagCatalogEntry: (tag: string) => void;
+  togglePromptCollapse: (promptId: string) => void;
+  setCollapsedPromptIds: (ids: string[]) => void;
   setLanguage: (lang: string) => void;
   setDataPath: (path: string) => void;
   setWebdavEnabled: (enabled: boolean) => void;
@@ -1835,6 +1850,7 @@ export const useSettingsStore = create<SettingsState>()(
         showSaveNotification: true,
         tagFilterMode: "multi" as TagFilterMode,
         promptTagCatalog: [],
+        collapsedPromptIds: [],
         language: normalizeLanguage(i18n.language),
         dataPath: "",
         webdavEnabled: false,
@@ -2187,6 +2203,18 @@ export const useSettingsStore = create<SettingsState>()(
           );
           setTouched({ promptTagCatalog: next });
           syncSettingsToMain({ promptTagCatalog: next });
+        },
+        togglePromptCollapse: (promptId) => {
+          const current = get().collapsedPromptIds;
+          const next = current.includes(promptId)
+            ? current.filter((id) => id !== promptId)
+            : [...current, promptId];
+          const normalized = normalizeCollapsedPromptIds(next);
+          setTouched({ collapsedPromptIds: normalized });
+        },
+        setCollapsedPromptIds: (ids) => {
+          const normalized = normalizeCollapsedPromptIds(ids);
+          setTouched({ collapsedPromptIds: normalized });
         },
         setLanguage: (lang) => {
           const normalized = normalizeLanguage(lang);
@@ -3104,7 +3132,7 @@ export const useSettingsStore = create<SettingsState>()(
     },
     {
       name: "prompthub-settings",
-      version: 16,
+      version: 17,
       partialize: stripEphemeralSettings,
       merge: (persistedState, currentState) => {
         const next = {
@@ -3133,6 +3161,9 @@ export const useSettingsStore = create<SettingsState>()(
         next.tagFilterMode = normalizeTagFilterMode(next.tagFilterMode);
         next.promptTagCatalog = normalizePromptTagCatalog(
           next.promptTagCatalog,
+        );
+        next.collapsedPromptIds = normalizeCollapsedPromptIds(
+          next.collapsedPromptIds,
         );
         next.skillProjects = normalizeSkillProjects(next.skillProjects);
         normalizeCustomAgentSettings(next, { migrateLegacyScanPaths: false });
@@ -3196,6 +3227,9 @@ export const useSettingsStore = create<SettingsState>()(
         normalizeAIModelDefaults(next);
         next.promptTagCatalog = normalizePromptTagCatalog(
           next.promptTagCatalog,
+        );
+        next.collapsedPromptIds = normalizeCollapsedPromptIds(
+          next.collapsedPromptIds,
         );
         next.tagFilterMode = normalizeTagFilterMode(next.tagFilterMode);
         next.shortcutModes = normalizeShortcutModes(next.shortcutModes);
@@ -3336,6 +3370,9 @@ export const useSettingsStore = create<SettingsState>()(
             ? next.backgroundImageBlur
             : DEFAULT_BACKGROUND_IMAGE_BLUR,
           version,
+        );
+        next.collapsedPromptIds = normalizeCollapsedPromptIds(
+          next.collapsedPromptIds,
         );
         return next;
       },

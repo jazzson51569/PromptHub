@@ -708,17 +708,10 @@ function PromptSkillMainContent() {
   const [currentQueueIndex, setCurrentQueueIndex] = useState(-1);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; prompt: Prompt } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; prompt: Prompt | null }>({ isOpen: false, prompt: null });
-  const [collapsedPromptIds, setCollapsedPromptIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('prompt_collapsed_ids');
-      if (saved) {
-        return new Set(JSON.parse(saved));
-      }
-    } catch {
-      // ignore
-    }
-    return new Set();
-  });
+  const collapsedPromptIdsArray = useSettingsStore((state) => state.collapsedPromptIds);
+  const collapsedPromptIds = useMemo(() => new Set(collapsedPromptIdsArray), [collapsedPromptIdsArray]);
+  const togglePromptCollapse = useSettingsStore((state) => state.togglePromptCollapse);
+  const setCollapsedPromptIds = useSettingsStore((state) => state.setCollapsedPromptIds);
   const renderMarkdownPref = useSettingsStore((state) => state.renderMarkdown);
   const setRenderMarkdownPref = useSettingsStore((state) => state.setRenderMarkdown);
   const [renderMarkdownEnabled, setRenderMarkdownEnabled] = useState(renderMarkdownPref);
@@ -2069,35 +2062,15 @@ function PromptSkillMainContent() {
     setContextMenu({ x: e.clientX, y: e.clientY, prompt });
   }, []);
 
-  const togglePromptCollapse = useCallback((promptId: string) => {
-    setCollapsedPromptIds((current) => {
-      const next = new Set(current);
-      if (next.has(promptId)) {
-        next.delete(promptId);
-      } else {
-        next.add(promptId);
-      }
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('prompt_collapsed_ids', JSON.stringify([...collapsedPromptIds]));
-    } catch {
-      // ignore
-    }
-  }, [collapsedPromptIds]);
-
   const handleCollapseAllPrompts = useCallback(() => {
     const hierarchyMeta = getPromptHierarchyMeta(visiblePrompts);
     const promptsWithChildren = visiblePrompts.filter((p) => {
       const childCount = hierarchyMeta.childCountById.get(p.id) ?? 0;
       return childCount > 0;
     });
-    const newCollapsedIds = new Set<string>(promptsWithChildren.map((p) => p.id));
+    const newCollapsedIds = promptsWithChildren.map((p) => p.id);
     setCollapsedPromptIds(newCollapsedIds);
-  }, [visiblePrompts]);
+  }, [visiblePrompts, setCollapsedPromptIds]);
 
   const handleTagFilterClick = useCallback((tag: string) => {
     if (tagFilterMode === 'single') {
