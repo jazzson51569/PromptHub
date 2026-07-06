@@ -55,6 +55,7 @@ import { resolvePromptMarkdownHref } from '../prompt/prompt-markdown-url';
 import { PromptQuickRewriteTrigger } from '../prompt/PromptQuickRewriteTrigger';
 import { PromptRelationshipPanel } from '../prompt/PromptRelationshipPanel';
 import { PromptAiResponsePanel } from '../prompt/PromptAiResponsePanel';
+import { PromptOutputFormatPanel } from '../prompt/PromptOutputFormatPanel';
 import { PromptDetailMetadata } from '../prompt/PromptDetailMetadata';
 import { PromptViewContainers } from '../prompt/PromptViewContainers';
 import { PromptContentField } from '../prompt/PromptContentField';
@@ -659,10 +660,14 @@ function PromptSkillMainContent() {
   const selectedIds = usePromptStore((state) => state.selectedIds);
   const lastSelectedId = usePromptStore((state) => state.lastSelectedId);
   const relations = usePromptStore((state) => state.relations);
+  const outputFormatItems = usePromptStore((state) => state.outputFormatItems);
   const selectPrompt = usePromptStore((state) => state.selectPrompt);
   const setSelectedIds = usePromptStore((state) => state.setSelectedIds);
   const createPrompt = usePromptStore((state) => state.createPrompt);
   const createRelation = usePromptStore((state) => state.createRelation);
+  const createOutputFormatItem = usePromptStore((state) => state.createOutputFormatItem);
+  const deleteOutputFormatItem = usePromptStore((state) => state.deleteOutputFormatItem);
+  const reorderOutputFormatItem = usePromptStore((state) => state.reorderOutputFormatItem);
   const toggleFavorite = usePromptStore((state) => state.toggleFavorite);
   const togglePinned = usePromptStore((state) => state.togglePinned);
   const deletePrompt = usePromptStore((state) => state.deletePrompt);
@@ -696,9 +701,24 @@ function PromptSkillMainContent() {
   const [isCopyVariableModalOpen, setIsCopyVariableModalOpen] = useState(false);
   const [copyPrompt, setCopyPrompt] = useState<Prompt | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // 多步变量输入状态（自定义输出格式）
+  const [copyOutputFormatQueue, setCopyOutputFormatQueue] = useState<Prompt[]>([]);
+  const [copyOutputFormatResults, setCopyOutputFormatResults] = useState<string[]>([]);
+  const [isMultiStepCopyMode, setIsMultiStepCopyMode] = useState(false);
+  const [currentQueueIndex, setCurrentQueueIndex] = useState(-1);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; prompt: Prompt } | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; prompt: Prompt | null }>({ isOpen: false, prompt: null });
-  const [collapsedPromptIds, setCollapsedPromptIds] = useState<Set<string>>(() => new Set());
+  const [collapsedPromptIds, setCollapsedPromptIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('prompt_collapsed_ids');
+      if (saved) {
+        return new Set(JSON.parse(saved));
+      }
+    } catch {
+      // ignore
+    }
+    return new Set();
+  });
   const renderMarkdownPref = useSettingsStore((state) => state.renderMarkdown);
   const setRenderMarkdownPref = useSettingsStore((state) => state.setRenderMarkdown);
   const [renderMarkdownEnabled, setRenderMarkdownEnabled] = useState(renderMarkdownPref);
@@ -1423,6 +1443,9 @@ function PromptSkillMainContent() {
     selectedPromptRelations.length +
     (selectedParentPrompt ? 1 : 0) +
     selectedChildPrompts.length;
+  const selectedOutputFormatCount = selectedPrompt
+    ? outputFormatItems.filter((item) => item.sourcePromptId === selectedPrompt.id).length
+    : 0;
 
   // Auto-select prompt language based on UI language (if English version exists)
   // 根据界面语言自动选择 Prompt 语言（如果有英文版本）
@@ -1446,6 +1469,7 @@ function PromptSkillMainContent() {
   const [isDetailInlineEditing, setIsDetailInlineEditing] = useState(false);
   const [isDetailInlineSaving, setIsDetailInlineSaving] = useState(false);
   const [isDetailRelationshipsOpen, setIsDetailRelationshipsOpen] = useState(false);
+  const [isDetailOutputFormatOpen, setIsDetailOutputFormatOpen] = useState(false);
   const [detailInlineActiveField, setDetailInlineActiveField] =
     useState<DetailInlineEditField>('title');
   const [detailInlineDraft, setDetailInlineDraft] = useState<DetailInlineEditDraft>({
@@ -1675,18 +1699,114 @@ function PromptSkillMainContent() {
   // Handle copying prompt - check for variables first
   // 处理复制 Prompt - 先检查是否有变量
   const handleCopyPrompt = async (prompt: Prompt) => {
+    console.log('====================================');
+    console.log('handleCopyPrompt 被调用');
+    console.log('当前提示词:', prompt.title);
+    console.log('当前提示词ID:', prompt.id);
     const resolvedPrompt = resolvePromptContentByLanguage(prompt, showEnglish);
 
-    if (hasUserDefinedPromptVariables(undefined, resolvedPrompt.userPrompt)) {
-      // 有变量，打开弹窗让用户填写
-      setCopyPrompt(prompt);
-      setIsCopyVariableModalOpen(true);
+    const currentOutputFormatItems = outputFormatItems
+      ? outputFormatItems
+          .filter((item) => item.sourcePromptId === prompt.id)
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+      : [];
+
+    console.log('自定义输出格式数量:', currentOutputFormatItems.length);
+    console.log('所有提示词数量:', prompts.length);
+
+    if (currentOutputFormatItems.length > 0 && prompts.length > 0) {
+      const promptById = new Map(prompts.map((p) => [p.id, p]));
+      const promptQueue: Prompt[] = [];
+
+      for (const item of currentOutputFormatItems) {
+        let targetPrompt: Prompt | undefined;
+        if (item.targetPromptId === null) {
+          targetPrompt = prompt;
+        } else {
+          targetPrompt = promptById.get(item.targetPromptId);
+        }
+        if (targetPrompt) {
+          promptQueue.push(targetPrompt);
+        } else {
+          console.error('Prompt not found in queue:', item.targetPromptId);
+        }
+      }
+
+      console.log('Building prompt queue:', promptQueue.map(p => p.title));
+      console.log('Current prompt id:', prompt.id);
+      console.log('Output format items:', currentOutputFormatItems);
+
+      setCopyOutputFormatQueue(promptQueue);
+      setCopyOutputFormatResults(new Array(promptQueue.length).fill(''));
+      setIsMultiStepCopyMode(true);
+      setCurrentQueueIndex(0);
     } else {
-      await copyTextToClipboard(buildPromptCopyText(resolvedPrompt));
-      await incrementUsageCount(prompt.id);
-      showToast(t('toast.copied'), 'success', showCopyNotification);
+      if (hasUserDefinedPromptVariables(undefined, resolvedPrompt.userPrompt)) {
+        setCopyPrompt(prompt);
+        setIsCopyVariableModalOpen(true);
+      } else {
+        const copyText = resolvedPrompt.userPrompt;
+        await copyTextToClipboard(copyText);
+        await incrementUsageCount(prompt.id);
+        showToast(t('toast.copied'), 'success', showCopyNotification);
+      }
     }
   };
+
+  useEffect(() => {
+    console.log('useEffect triggered:', { isMultiStepCopyMode, currentQueueIndex, queueLength: copyOutputFormatQueue.length });
+    
+    if (isMultiStepCopyMode && currentQueueIndex >= 0 && currentQueueIndex < copyOutputFormatQueue.length) {
+      const currentPromptInQueue = copyOutputFormatQueue[currentQueueIndex];
+      console.log('Processing prompt:', currentPromptInQueue.title, 'at index:', currentQueueIndex);
+      
+      const resolved = resolvePromptContentByLanguage(currentPromptInQueue, showEnglish);
+
+      const hasVariables = (resolved.systemPrompt || '').includes('{{') || (resolved.userPrompt || '').includes('{{');
+      console.log('====================================');
+      console.log('处理提示词:', currentPromptInQueue.title);
+      console.log('提示词原文 - systemPrompt:', resolved.systemPrompt || '(空)');
+      console.log('提示词原文 - userPrompt:', resolved.userPrompt || '(空)');
+      console.log('是否包含变量:', hasVariables);
+      console.log('是否需要调用变量填充界面:', hasVariables ? '是' : '否');
+      console.log('====================================');
+      
+      if (hasVariables) {
+        setCopyPrompt(currentPromptInQueue);
+        setIsCopyVariableModalOpen(true);
+        console.log('打开变量填充界面:', currentPromptInQueue.title);
+      } else {
+        const promptText = resolved.systemPrompt ? `${resolved.systemPrompt}\n\n${resolved.userPrompt}` : resolved.userPrompt;
+        setCopyOutputFormatResults((prev) => {
+          const newResults = [...prev];
+          newResults[currentQueueIndex] = promptText;
+          return newResults;
+        });
+        setCurrentQueueIndex((prev) => prev + 1);
+        console.log('无变量，自动拼接后推进到下一条，下一条索引:', currentQueueIndex + 1);
+      }
+    } else if (isMultiStepCopyMode && currentQueueIndex >= copyOutputFormatQueue.length && copyOutputFormatQueue.length > 0) {
+      const finalText = copyOutputFormatResults.filter((t) => t.trim()).join('\n\n');
+      console.log('====================================');
+      console.log('最终拼接结果:');
+      console.log(finalText);
+      console.log('====================================');
+      copyTextToClipboard(finalText).then(() => {
+        if (copyOutputFormatQueue[0]) {
+          incrementUsageCount(copyOutputFormatQueue[0].id);
+        }
+        triggerCopied();
+        showToast(t('toast.copied'), 'success', showCopyNotification);
+      }).finally(() => {
+        setIsCopyVariableModalOpen(false);
+        setCopyPrompt(null);
+        setIsMultiStepCopyMode(false);
+        setCopyOutputFormatQueue([]);
+        setCopyOutputFormatResults([]);
+        setCurrentQueueIndex(-1);
+      });
+    }
+  }, [isMultiStepCopyMode, currentQueueIndex, copyOutputFormatQueue]);
 
   const handleDuplicatePrompt = useCallback(async (prompt: Prompt) => {
     const duplicatedPrompt = await createPrompt({
@@ -1960,6 +2080,14 @@ function PromptSkillMainContent() {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('prompt_collapsed_ids', JSON.stringify([...collapsedPromptIds]));
+    } catch {
+      // ignore
+    }
+  }, [collapsedPromptIds]);
 
   const handleCollapseAllPrompts = useCallback(() => {
     const hierarchyMeta = getPromptHierarchyMeta(visiblePrompts);
@@ -2462,8 +2590,11 @@ function PromptSkillMainContent() {
                     childPrompts={selectedChildPrompts}
                     folderOptions={detailFolderOptions}
                     relationshipCount={selectedRelationshipCount}
+                    outputFormatCount={selectedOutputFormatCount}
                     isRelatedPromptsOpen={isDetailRelationshipsOpen}
+                    isOutputFormatOpen={isDetailOutputFormatOpen}
                     isRelatedPromptsDisabled={isDetailInlineEditing}
+                    isOutputFormatDisabled={isDetailInlineEditing}
                     t={t}
                     onMoveToFolder={(prompt, folderId) => {
                       void handleMovePrompt(prompt, folderId);
@@ -2471,6 +2602,9 @@ function PromptSkillMainContent() {
                     onSelectPrompt={selectPrompt}
                     onToggleRelatedPrompts={() =>
                       setIsDetailRelationshipsOpen((open) => !open)
+                    }
+                    onToggleOutputFormat={() =>
+                      setIsDetailOutputFormatOpen((open) => !open)
                     }
                   />
 
@@ -2485,6 +2619,19 @@ function PromptSkillMainContent() {
                       onSelectPrompt={(promptId) => selectPrompt(promptId)}
                       disabled={isDetailInlineEditing}
                       className="mb-4"
+                    />
+                  )}
+
+                  {isDetailOutputFormatOpen && (
+                    <PromptOutputFormatPanel
+                      currentPrompt={selectedPrompt}
+                      prompts={prompts}
+                      outputFormatItems={outputFormatItems}
+                      onCreateOutputFormatItem={createOutputFormatItem}
+                      onDeleteOutputFormatItem={deleteOutputFormatItem}
+                      onReorderOutputFormatItem={reorderOutputFormatItem}
+                      onSelectPrompt={(promptId) => selectPrompt(promptId)}
+                      disabled={isDetailInlineEditing}
                     />
                   )}
 
@@ -2723,21 +2870,7 @@ function PromptSkillMainContent() {
                 <div className="w-full flex items-center gap-3 flex-wrap">
 	                  <button
 	                    type="button"
-	                    onClick={async () => {
-	                      // Select content based on language mode
-                      // 根据语言模式选择内容
-                      const currentUserPrompt = showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt;
-                      const hasVariables = hasUserDefinedPromptVariables(undefined, currentUserPrompt);
-
-                      if (hasVariables) {
-                        setIsVariableModalOpen(true);
-                      } else {
-                        await copyTextToClipboard(currentUserPrompt);
-                        await incrementUsageCount(selectedPrompt.id);
-                        triggerCopied();
-                        showToast(t('toast.copied'), 'success', showCopyNotification);
-                      }
-                    }}
+	                    onClick={() => void handleCopyPrompt(selectedPrompt)}
 	                    disabled={isDetailInlineEditing}
 	                    className="flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
 	                  >
@@ -2904,6 +3037,7 @@ function PromptSkillMainContent() {
             isOpen={isVariableModalOpen}
             onClose={() => setIsVariableModalOpen(false)}
             promptId={selectedPrompt.id}
+            promptTitle={selectedPrompt.title}
             systemPrompt={undefined}
             userPrompt={showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt}
             mode="copy"
@@ -2914,6 +3048,10 @@ function PromptSkillMainContent() {
               showToast(t('toast.copied'), 'success', showCopyNotification);
               setIsVariableModalOpen(false);
             }}
+            outputFormatItems={outputFormatItems}
+            prompts={prompts}
+            currentPrompt={selectedPrompt}
+            showEnglish={showEnglish}
           />
         </Suspense>
       )}
@@ -2926,6 +3064,7 @@ function PromptSkillMainContent() {
             isOpen={isAiTestVariableModalOpen}
             onClose={() => setIsAiTestVariableModalOpen(false)}
             promptId={selectedPrompt.id}
+            promptTitle={selectedPrompt.title}
             systemPrompt={showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt}
             userPrompt={showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt}
             mode="aiTest"
@@ -2945,6 +3084,7 @@ function PromptSkillMainContent() {
             isOpen={isCompareVariableModalOpen}
             onClose={() => setIsCompareVariableModalOpen(false)}
             promptId={selectedPrompt.id}
+            promptTitle={selectedPrompt.title}
             systemPrompt={showEnglish ? (selectedPrompt.systemPromptEn || selectedPrompt.systemPrompt) : selectedPrompt.systemPrompt}
             userPrompt={showEnglish ? (selectedPrompt.userPromptEn || selectedPrompt.userPrompt) : selectedPrompt.userPrompt}
             mode="aiTest"
@@ -2965,18 +3105,34 @@ function PromptSkillMainContent() {
             onClose={() => {
               setIsCopyVariableModalOpen(false);
               setCopyPrompt(null);
+              setIsMultiStepCopyMode(false);
+              setCopyOutputFormatQueue([]);
+              setCopyOutputFormatResults([]);
+              setCurrentQueueIndex(-1);
             }}
             promptId={copyPrompt.id}
-            systemPrompt={undefined}
-            userPrompt={resolvePromptContentByLanguage(copyPrompt, showEnglish).userPrompt}
+            promptTitle={copyPrompt.title}
+            systemPrompt={showEnglish ? (copyPrompt.systemPromptEn || copyPrompt.systemPrompt) : copyPrompt.systemPrompt}
+            userPrompt={showEnglish ? (copyPrompt.userPromptEn || copyPrompt.userPrompt) : copyPrompt.userPrompt}
             mode="copy"
             onCopy={async (text) => {
-              await copyTextToClipboard(text);
-              await incrementUsageCount(copyPrompt.id);
-              triggerCopied();
-              showToast(t('toast.copied'), 'success', showCopyNotification);
-              setIsCopyVariableModalOpen(false);
-              setCopyPrompt(null);
+              if (isMultiStepCopyMode) {
+                setCopyOutputFormatResults((prev) => {
+                  const newResults = [...prev];
+                  newResults[currentQueueIndex] = text;
+                  return newResults;
+                });
+                setIsCopyVariableModalOpen(false);
+                setCopyPrompt(null);
+                setCurrentQueueIndex((prev) => prev + 1);
+              } else {
+                await copyTextToClipboard(text);
+                await incrementUsageCount(copyPrompt.id);
+                triggerCopied();
+                showToast(t('toast.copied'), 'success', showCopyNotification);
+                setIsCopyVariableModalOpen(false);
+                setCopyPrompt(null);
+              }
             }}
           />
         </Suspense>

@@ -393,7 +393,11 @@ export function resolveInitialUserDataPath(
 ): string {
   const configuredPath = deps.readConfiguredDataPath(options.appDataPath);
   if (configuredPath) {
-    return configuredPath;
+    const parentDir = dirnamePlatformPath(configuredPath, options.platform);
+    if (deps.isPathWritable(parentDir)) {
+      return configuredPath;
+    }
+    console.warn("[DataPath] Configured path is not writable, falling back:", configuredPath);
   }
 
   if (deps.hasExistingAppData(options.defaultUserDataPath)) {

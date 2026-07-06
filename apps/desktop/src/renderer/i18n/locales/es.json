@@ -217,6 +217,17 @@
       "addSuggestion": "Vincular {{title}}",
       "mentionHint": "Vincular un prompt"
     },
+    "outputFormat": {
+      "title": "Formato de salida personalizado",
+      "searchPlaceholder": "Buscar prompts para agregar…",
+      "noMatches": "No hay prompts coincidentes",
+      "empty": "No hay formato de salida configurado. Agrega prompts para crear una secuencia de salida personalizada.",
+      "addSelf": "Agregar prompt actual",
+      "self": "Propio",
+      "missing": "Faltante",
+      "removeItem": "Eliminar {{title}}",
+      "openPrompt": "Abrir prompt {{title}}"
+    },
     "graph": {
       "title": "Grafo de relaciones",
       "promptCount": "{{count}} Prompts",

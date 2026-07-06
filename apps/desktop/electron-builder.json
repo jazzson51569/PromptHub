@@ -3,7 +3,7 @@
   "appId": "com.prompthub.app",
   "productName": "PromptHub",
   "directories": {
-    "output": "dist_new21",
+    "output": "dist_new49",
     "buildResources": "resources"
   },
   "extraMetadata": {
@@ -54,7 +54,7 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64", "arm64"]
+        "arch": ["x64", "ia32", "arm64"]
       }
     ],
     "artifactName": "${productName}-Setup-${version}-${arch}.${ext}",

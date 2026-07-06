@@ -88,6 +88,48 @@ import { resolveLocalMediaProtocolPath } from "./local-media-protocol";
 // 禁用 GPU 加速（可选，某些系统上可能需要）
 // app.disableHardwareAcceleration();
 
+const DEFAULT_USER_DATA_PATH = path.join(
+  app.isPackaged
+    ? path.dirname(process.execPath)
+    : process.cwd(),
+  "app-data"
+);
+
+const appDataPathForConfig = process.platform === "win32"
+  ? process.env.APPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Roaming")
+  : process.platform === "darwin"
+    ? path.join(process.env.HOME || "", "Library", "Application Support")
+    : process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || "", ".config");
+const configFilePath = path.join(appDataPathForConfig, "PromptHub", "data-path.json");
+
+try {
+  if (fs.existsSync(configFilePath)) {
+    const parsed = JSON.parse(fs.readFileSync(configFilePath, "utf8")) as { dataPath?: unknown };
+    if (typeof parsed.dataPath === "string" && parsed.dataPath.trim() !== "") {
+      const configuredPath = path.resolve(parsed.dataPath);
+      const parentDir = path.dirname(configuredPath);
+      try {
+        fs.accessSync(parentDir, fs.constants.W_OK);
+      } catch {
+        console.warn("[Startup] Configured data path is not writable, removing config:", configuredPath);
+        fs.unlinkSync(configFilePath);
+      }
+    }
+  }
+} catch (error) {
+  console.warn("[Startup] Failed to check data-path.json:", error);
+}
+
+const resolvedUserDataPath = resolveInitialUserDataPath({
+  appDataPath: appDataPathForConfig,
+  defaultUserDataPath: DEFAULT_USER_DATA_PATH,
+  exePath: process.execPath,
+  isPackaged: app.isPackaged,
+  platform: process.platform,
+});
+
+app.setPath("userData", resolvedUserDataPath);
+
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let minimizeToTray = false;
@@ -160,18 +202,13 @@ protocol.registerSchemesAsPrivileged([
 const isE2E = isE2EEnabled();
 configureE2ETestProfile();
 if (!isE2E) {
-  const appDataPath = app.getPath("appData");
-  const resolvedUserDataPath = resolveInitialUserDataPath({
-    appDataPath,
-    defaultUserDataPath: getHistoricalDefaultUserDataPath(
-      appDataPath,
-      process.platform,
-    ),
-    exePath: process.execPath,
-    isPackaged: app.isPackaged,
-    platform: process.platform,
-  });
-  app.setPath("userData", resolvedUserDataPath);
+  const appDataPath = process.platform === "win32"
+    ? process.env.APPDATA || path.join(process.env.USERPROFILE || "", "AppData", "Roaming")
+    : process.platform === "darwin"
+      ? path.join(process.env.HOME || "", "Library", "Application Support")
+      : process.env.XDG_CONFIG_HOME || path.join(process.env.HOME || "", ".config");
+  
+  app.setPath("appData", appDataPath);
 }
 configureRuntimePaths({
   appDataPath: app.getPath("appData"),
@@ -332,12 +369,31 @@ async function createWindow() {
       console.error("Failed to load dev server:", error);
     }
   } else {
-    await mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
-    // Handle DevTools shortcuts in production
-    // 生产环境处理开发者工具快捷键
+    const rendererPath = path.join(__dirname, "../renderer/index.html");
+    console.log("[Production] Loading renderer from:", rendererPath);
+    console.log("[Production] __dirname:", __dirname);
+    console.log("[Production] fs.existsSync(rendererPath):", fs.existsSync(rendererPath));
+    
+    mainWindow.webContents.on("did-fail-load", (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      console.error("[Renderer] did-fail-load:", { errorCode, errorDescription, validatedURL, isMainFrame });
+    });
+    
+    mainWindow.webContents.on("render-process-gone", (event, details) => {
+      console.error("[Renderer] render-process-gone:", details);
+    });
+    
+    mainWindow.webContents.on("console-message", (event, level, message, line, sourceId) => {
+      const levelPrefix = level === 0 ? "[DEBUG]" : level === 1 ? "[INFO]" : level === 2 ? "[WARN]" : "[ERROR]";
+      console.log(`[Renderer Console] ${levelPrefix} ${sourceId}:${line}: ${message}`);
+    });
+    
+    try {
+      await mainWindow.loadFile(rendererPath);
+    } catch (error) {
+      console.error("[Production] Failed to load renderer:", error);
+    }
+    
     mainWindow.webContents.on("before-input-event", (event, input) => {
-      // Check for DevTools shortcuts: F12, Ctrl+Shift+I, Cmd+Option+I
-      // 检查是否为开发者工具快捷键
       const isDevToolsShortcut =
         input.key === "F12" ||
         (input.control && input.shift && input.key.toLowerCase() === "i") ||
@@ -345,12 +401,8 @@ async function createWindow() {
 
       if (isDevToolsShortcut) {
         if (isDebugMode) {
-          // Debug mode enabled: actively open/close DevTools
-          // 调试模式已启用：主动打开/关闭开发者工具
           mainWindow?.webContents.toggleDevTools();
         }
-        // Always prevent default to have full control
-        // 始终阻止默认行为以完全控制
         event.preventDefault();
       }
     });

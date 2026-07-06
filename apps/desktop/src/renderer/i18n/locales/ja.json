@@ -217,6 +217,17 @@
       "addSuggestion": "{{title}} を関連付け",
       "mentionHint": "Prompt を関連付け"
     },
+    "outputFormat": {
+      "title": "カスタム出力形式",
+      "searchPlaceholder": "追加するプロンプトを検索…",
+      "noMatches": "一致するプロンプトがありません",
+      "empty": "出力形式が設定されていません。プロンプトを追加してカスタム出力シーケンスを作成します。",
+      "addSelf": "現在のプロンプトを追加",
+      "self": "自分自身",
+      "missing": "見つかりません",
+      "removeItem": "{{title}} を削除",
+      "openPrompt": "プロンプト {{title}} を開く"
+    },
     "graph": {
       "title": "関係グラフ",
       "promptCount": "{{count}} 件の Prompt",

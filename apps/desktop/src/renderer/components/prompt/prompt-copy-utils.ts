@@ -1,4 +1,4 @@
-import type { Prompt } from "@prompthub/shared/types";
+import type { OutputFormatItem, Prompt } from "@prompthub/shared/types";
 export { copyTextToClipboard } from "../../utils/clipboard";
 import { parsePromptVariables } from "./prompt-modal-utils";
 
@@ -41,8 +41,47 @@ export function hasUserDefinedPromptVariables(
   );
 }
 
-export function buildPromptCopyText({
-  userPrompt,
-}: ResolvedPromptContent): string {
-  return userPrompt;
+export function buildPromptCopyText(
+  content: ResolvedPromptContent,
+  options?: {
+    outputFormatItems?: OutputFormatItem[];
+    prompts?: Prompt[];
+    currentPrompt?: Prompt;
+    showEnglish?: boolean;
+  },
+): string {
+  const { outputFormatItems, prompts, currentPrompt, showEnglish = false } = options || {};
+
+  if (outputFormatItems && prompts && currentPrompt) {
+    const currentOutputFormatItems = outputFormatItems
+      .filter((item) => item.sourcePromptId === currentPrompt.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    if (currentOutputFormatItems.length > 0) {
+      const promptById = new Map(prompts.map((p) => [p.id, p]));
+      const parts: string[] = [];
+
+      for (const item of currentOutputFormatItems) {
+        let targetPrompt: Prompt | undefined;
+
+        if (item.targetPromptId === null) {
+          targetPrompt = currentPrompt;
+        } else {
+          targetPrompt = promptById.get(item.targetPromptId);
+        }
+
+        if (targetPrompt) {
+          const resolved = resolvePromptContentByLanguage(targetPrompt, showEnglish);
+          if (resolved.systemPrompt) {
+            parts.push(resolved.systemPrompt);
+          }
+          parts.push(resolved.userPrompt);
+        }
+      }
+
+      return parts.join("\n\n");
+    }
+  }
+
+  return content.userPrompt;
 }

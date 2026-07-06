@@ -218,6 +218,17 @@
       "addSuggestion": "关联 {{title}}",
       "mentionHint": "关联一个 Prompt"
     },
+    "outputFormat": {
+      "title": "自定义输出格式",
+      "searchPlaceholder": "搜索要添加的 Prompt…",
+      "noMatches": "没有匹配的 Prompt",
+      "empty": "未配置输出格式。添加 Prompt 以创建自定义输出序列。",
+      "addSelf": "添加当前 Prompt",
+      "self": "当前",
+      "missing": "缺失",
+      "removeItem": "移除 {{title}}",
+      "openPrompt": "打开 Prompt {{title}}"
+    },
     "graph": {
       "title": "关系图谱",
       "promptCount": "{{count}} 个 Prompt",

@@ -44,5 +44,13 @@
     "verify:release": "node --experimental-strip-types scripts/verify-release.mts",
     "verify:release:quick": "node --experimental-strip-types scripts/verify-release.mts --profile quick",
     "docker:web:build": "docker build -f apps/web/Dockerfile -t prompthub-web:local ."
+  },
+  "dependencies": {
+    "@alloc/quick-lru": "^5.2.0",
+    "@rolldown/pluginutils": "^1.0.1",
+    "tinyglobby": "^0.2.17"
+  },
+  "devDependencies": {
+    "electron": "33"
   }
 }

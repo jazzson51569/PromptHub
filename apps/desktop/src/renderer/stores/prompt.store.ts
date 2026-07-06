@@ -4,6 +4,8 @@ import type {
   Prompt,
   CreatePromptDTO,
   CreatePromptRelationDTO,
+  CreateOutputFormatItemDTO,
+  OutputFormatItem,
   PromptRelation,
   UpdatePromptDTO,
   UpdatePromptRelationDTO,
@@ -44,6 +46,7 @@ function isViewMode(value: unknown): value is ViewMode {
 interface PromptState {
   prompts: Prompt[];
   relations: PromptRelation[];
+  outputFormatItems: OutputFormatItem[];
   selectedId: string | null;
   selectedIds: string[];
   lastSelectedId: string | null;
@@ -70,6 +73,10 @@ interface PromptState {
   createRelation: (data: CreatePromptRelationDTO) => Promise<PromptRelation>;
   updateRelation: (id: string, data: UpdatePromptRelationDTO) => Promise<void>;
   deleteRelation: (id: string) => Promise<void>;
+  fetchOutputFormatItems: () => Promise<void>;
+  createOutputFormatItem: (data: CreateOutputFormatItemDTO) => Promise<OutputFormatItem>;
+  deleteOutputFormatItem: (id: string) => Promise<void>;
+  reorderOutputFormatItem: (sourcePromptId: string, itemId: string, newSortOrder: number) => Promise<void>;
   movePrompts: (ids: string[], folderId: string) => Promise<void>;
   movePrompt: (promptId: string, newParentId: string | null, newOrder: number) => Promise<void>;
   deletePrompt: (id: string) => Promise<void>;
@@ -97,6 +104,7 @@ export const usePromptStore = create<PromptState>()(
     (set, get) => ({
       prompts: [],
       relations: [],
+      outputFormatItems: [],
       selectedId: null,
       selectedIds: [],
       lastSelectedId: null,
@@ -114,11 +122,12 @@ export const usePromptStore = create<PromptState>()(
         set({ isLoading: true });
         try {
           // Get data from IndexedDB
-          const [prompts, relations] = await Promise.all([
+          const [prompts, relations, outputFormatItems] = await Promise.all([
             db.getAllPrompts(),
             db.listPromptRelations(),
+            db.listOutputFormatItems(),
           ]);
-          set({ prompts, relations });
+          set({ prompts, relations, outputFormatItems });
         } catch (error) {
           console.error("Failed to fetch prompts:", error);
         } finally {
@@ -222,6 +231,43 @@ export const usePromptStore = create<PromptState>()(
         scheduleAllSaveSync("prompt:relation:delete");
       },
 
+      fetchOutputFormatItems: async () => {
+        const items = await db.listOutputFormatItems();
+        set({ outputFormatItems: items });
+      },
+
+      createOutputFormatItem: async (data) => {
+        try {
+          const item = await db.createOutputFormatItem(data);
+          if (!item) return;
+          set((state) => ({
+            outputFormatItems: [
+              item,
+              ...state.outputFormatItems.filter((i) => i.id !== item.id),
+            ],
+          }));
+          scheduleAllSaveSync("prompt:outputFormat:create");
+          return item;
+        } catch (error) {
+          console.error("Failed to create output format item:", error);
+        }
+      },
+
+      deleteOutputFormatItem: async (id) => {
+        const deleted = await db.deleteOutputFormatItem(id);
+        if (!deleted) return;
+        set((state) => ({
+          outputFormatItems: state.outputFormatItems.filter((item) => item.id !== id),
+        }));
+        scheduleAllSaveSync("prompt:outputFormat:delete");
+      },
+
+      reorderOutputFormatItem: async (sourcePromptId, itemId, newSortOrder) => {
+        await db.reorderOutputFormatItem(sourcePromptId, itemId, newSortOrder);
+        await get().fetchOutputFormatItems();
+        scheduleAllSaveSync("prompt:outputFormat:reorder");
+      },
+
       movePrompts: async (ids, folderId) => {
         await db.movePrompts(ids, folderId);
         set((state) => ({
@@ -247,6 +293,10 @@ export const usePromptStore = create<PromptState>()(
           relations: state.relations.filter(
             (relation) =>
               relation.sourcePromptId !== id && relation.targetPromptId !== id,
+          ),
+          outputFormatItems: state.outputFormatItems.filter(
+            (item) =>
+              item.sourcePromptId !== id && item.targetPromptId !== id,
           ),
           selectedId: state.selectedId === id ? null : state.selectedId,
           selectedIds: state.selectedIds.filter(

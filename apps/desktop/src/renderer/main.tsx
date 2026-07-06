@@ -16,12 +16,46 @@ if (window.electron?.e2e) {
   };
 }
 
-void i18nReady.then(() => {
-  ReactDOM.createRoot(document.getElementById('root')!).render(
-    <React.StrictMode>
-      <ToastProvider>
-        <App />
-      </ToastProvider>
-    </React.StrictMode>
-  );
+window.addEventListener('error', (event) => {
+  console.error('[Global Error]', event.error);
 });
+
+window.addEventListener('unhandledrejection', (event) => {
+  console.error('[Unhandled Rejection]', event.reason);
+});
+
+void i18nReady
+  .then(() => {
+    try {
+      const root = ReactDOM.createRoot(document.getElementById('root')!);
+      root.render(
+        <React.StrictMode>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </React.StrictMode>
+      );
+      console.log('[Renderer] React app rendered successfully');
+    } catch (renderError) {
+      console.error('[Renderer] Failed to render React app:', renderError);
+      const root = document.getElementById('root');
+      if (root) {
+        root.innerHTML = `<div style="padding: 20px; color: red;">Failed to render application: ${renderError.message}</div>`;
+      }
+    }
+  })
+  .catch((error) => {
+    console.error("Failed to initialize i18n:", error);
+    try {
+      const root = ReactDOM.createRoot(document.getElementById('root')!);
+      root.render(
+        <React.StrictMode>
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </React.StrictMode>
+      );
+    } catch (renderError) {
+      console.error('[Renderer] Failed to render React app after i18n error:', renderError);
+    }
+  });

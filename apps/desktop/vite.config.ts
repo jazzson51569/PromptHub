@@ -110,6 +110,10 @@ export default defineConfig(async () => ({
     // Performance: Disable sourcemap in production to reduce bundle size
     // 性能：生产环境禁用 sourcemap 以减少打包体积
     sourcemap: process.env.NODE_ENV === "development",
+    minify: "esbuild",
+    esbuild: {
+      drop: ["debugger"],
+    },
     rollupOptions: {
       output: {
         // Manual chunks for better code splitting and caching

@@ -14,6 +14,7 @@ import {
   ImageIcon,
   GlobeIcon,
   LogOutIcon,
+  BugIcon,
 } from "lucide-react";
 import { clsx } from "clsx";
 import type { UpdateStatus } from "../UpdateDialog";
@@ -789,8 +790,8 @@ export function TopBar({
           {/* Split Button for New Prompt / New Skill / New MCP / New Plugin */}
           {showCreateButton && (
             <div
-              ref={createMenuRef}
-              className="flex items-center rounded-lg bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-all ml-4 relative h-8"
+                ref={createMenuRef}
+                className="flex items-center rounded-lg bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 transition-all ml-1 relative h-8"
               style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
             >
               <button
@@ -1004,6 +1005,20 @@ export function TopBar({
               )}
             </div>
           )}
+
+          {/* 开发者工具 */}
+          <button
+            type="button"
+            onClick={() => {
+              window.electron?.toggleDevTools?.();
+            }}
+            className="flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+            style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+            title="开发者工具"
+            aria-label="开发者工具"
+          >
+            <BugIcon aria-hidden="true" className="w-4 h-4" />
+          </button>
 
           {/* 主题切换 */}
           <button

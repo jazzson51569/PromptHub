@@ -8,8 +8,9 @@ import { parsePromptVariables,
   replacePromptVariables,
   type ParsedPromptVariable,
 } from './prompt-modal-utils';
-import { copyTextToClipboard } from './prompt-copy-utils';
+import { copyTextToClipboard, buildPromptCopyText, resolvePromptContentByLanguage } from './prompt-copy-utils';
 import { usePromptStore } from '../../stores/prompt.store';
+import type { OutputFormatItem, Prompt } from '@prompthub/shared/types';
 
 type ModalMode = 'copy' | 'aiTest';
 
@@ -36,6 +37,7 @@ interface VariableInputModalProps {
   isOpen: boolean;
   onClose: () => void;
   promptId: string;
+  promptTitle?: string;
   systemPrompt?: string;
   userPrompt: string;
   mode?: ModalMode;
@@ -47,6 +49,10 @@ interface VariableInputModalProps {
     imageAttachments?: VariableInputImageAttachment[],
   ) => void;
   isAiTesting?: boolean;
+  outputFormatItems?: OutputFormatItem[];
+  prompts?: Prompt[];
+  currentPrompt?: Prompt;
+  showEnglish?: boolean;
 }
 
 const MAX_AI_TEST_IMAGES = 8;
@@ -98,12 +104,17 @@ export function VariableInputModal({
   isOpen,
   onClose,
   promptId,
+  promptTitle,
   systemPrompt,
   userPrompt,
   mode = 'copy',
   onCopy,
   onAiTest,
   isAiTesting = false,
+  outputFormatItems,
+  prompts,
+  currentPrompt,
+  showEnglish = false,
 }: VariableInputModalProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -380,8 +391,43 @@ export function VariableInputModal({
     // 保存变量历史
     saveVariableHistory(promptId, variables);
 
-    const filledUserPrompt = replaceVariables(userPrompt);
-    const result = filledUserPrompt;
+    let result: string;
+
+    if (outputFormatItems && prompts && currentPrompt) {
+      const currentOutputFormatItems = outputFormatItems
+        .filter((item) => item.sourcePromptId === currentPrompt.id)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+
+      if (currentOutputFormatItems.length > 0) {
+        const promptById = new Map(prompts.map((p) => [p.id, p]));
+        const parts: string[] = [];
+
+        for (const item of currentOutputFormatItems) {
+          let targetPrompt: Prompt | undefined;
+
+          if (item.targetPromptId === null) {
+            targetPrompt = currentPrompt;
+          } else {
+            targetPrompt = promptById.get(item.targetPromptId);
+          }
+
+          if (targetPrompt) {
+            const resolved = resolvePromptContentByLanguage(targetPrompt, showEnglish);
+            if (resolved.systemPrompt) {
+              parts.push(replaceVariables(resolved.systemPrompt));
+            }
+            parts.push(replaceVariables(resolved.userPrompt));
+          }
+        }
+
+        result = parts.join("\n\n");
+      } else {
+        result = replaceVariables(userPrompt);
+      }
+    } else {
+      result = replaceVariables(userPrompt);
+    }
+
     const copySession = modalSessionRef.current;
 
     try {
@@ -450,7 +496,17 @@ export function VariableInputModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('prompt.variableInput')} size="2xl">
+    <Modal isOpen={isOpen} onClose={onClose} size="2xl">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold">
+          {t('prompt.variableInput')}
+          {promptTitle && (
+            <span className="ml-2 text-sm font-normal text-primary">
+              {promptTitle}
+            </span>
+          )}
+        </h3>
+      </div>
       <div className="flex flex-col max-h-[70vh]">
         {/* Scrollable content / 可滚动内容 */}
         <div className="flex-1 overflow-y-auto space-y-5 pr-1">

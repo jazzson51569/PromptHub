@@ -218,6 +218,17 @@
       "addSuggestion": "Link {{title}}",
       "mentionHint": "Link a prompt"
     },
+    "outputFormat": {
+      "title": "Custom Output Format",
+      "searchPlaceholder": "Search prompts to add…",
+      "noMatches": "No matching prompts",
+      "empty": "No output format configured. Add prompts to create a custom output sequence.",
+      "addSelf": "Add current prompt",
+      "self": "Self",
+      "missing": "Missing",
+      "removeItem": "Remove {{title}}",
+      "openPrompt": "Open prompt {{title}}"
+    },
     "graph": {
       "title": "Relationship Graph",
       "promptCount": "{{count}} prompts",

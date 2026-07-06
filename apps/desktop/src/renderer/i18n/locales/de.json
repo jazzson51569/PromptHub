@@ -217,6 +217,17 @@
       "addSuggestion": "{{title}} verknüpfen",
       "mentionHint": "Prompt verknüpfen"
     },
+    "outputFormat": {
+      "title": "Benutzerdefiniertes Ausgabeformat",
+      "searchPlaceholder": "Prompts zum Hinzufügen suchen…",
+      "noMatches": "Keine passenden Prompts",
+      "empty": "Kein Ausgabeformat konfiguriert. Fügen Sie Prompts hinzu, um eine benutzerdefinierte Ausgabesequenz zu erstellen.",
+      "addSelf": "Aktuellen Prompt hinzufügen",
+      "self": "Selbst",
+      "missing": "Fehlt",
+      "removeItem": "{{title}} entfernen",
+      "openPrompt": "Prompt {{title}} öffnen"
+    },
     "graph": {
       "title": "Beziehungsgraph",
       "promptCount": "{{count}} Prompts",

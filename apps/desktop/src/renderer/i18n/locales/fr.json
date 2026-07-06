@@ -217,6 +217,17 @@
       "addSuggestion": "Lier {{title}}",
       "mentionHint": "Lier un prompt"
     },
+    "outputFormat": {
+      "title": "Format de sortie personnalisé",
+      "searchPlaceholder": "Rechercher des prompts à ajouter…",
+      "noMatches": "Aucun prompt correspondant",
+      "empty": "Aucun format de sortie configuré. Ajoutez des prompts pour créer une séquence de sortie personnalisée.",
+      "addSelf": "Ajouter le prompt actuel",
+      "self": "Soi-même",
+      "missing": "Manquant",
+      "removeItem": "Supprimer {{title}}",
+      "openPrompt": "Ouvrir le prompt {{title}}"
+    },
     "graph": {
       "title": "Graphe de relations",
       "promptCount": "{{count}} Prompts",

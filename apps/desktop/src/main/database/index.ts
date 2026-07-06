@@ -8,6 +8,7 @@
  */
 import path from "path";
 import fs from "fs";
+import { app } from "electron";
 import {
   DatabaseAdapter,
   initDatabase as dbInit,
@@ -32,6 +33,7 @@ export type { Database } from "@prompthub/db";
 export { SCHEMA_TABLES, SCHEMA_INDEXES, SCHEMA } from "@prompthub/db";
 export { PromptDB } from "@prompthub/db";
 export { PromptRelationDB } from "@prompthub/db";
+export { PromptOutputFormatDB } from "@prompthub/db";
 export { FolderDB } from "@prompthub/db";
 export { SkillDB } from "@prompthub/db";
 export { RuleDB } from "@prompthub/db";
@@ -159,8 +161,29 @@ function ensurePreUpgradeBackup(dbPath: string): void {
  * Initialize database with desktop-specific path resolution and hooks.
  */
 export function initDatabase(): DatabaseAdapter.Database {
-  const dbPath = getDatabasePath();
-  ensurePreUpgradeBackup(dbPath);
+  let dbPath = getDatabasePath();
+  
+  const dbDir = path.dirname(dbPath);
+  let canWrite = false;
+  try {
+    fs.mkdirSync(dbDir, { recursive: true });
+    const testFile = path.join(dbDir, ".write-test");
+    fs.writeFileSync(testFile, "");
+    fs.unlinkSync(testFile);
+    canWrite = true;
+  } catch (error) {
+    console.warn("[Database] Cannot write to configured data path:", dbDir, error);
+  }
+  
+  if (!canWrite) {
+    console.warn("[Database] Falling back to default data path");
+    const defaultDataPath = path.join(app.getPath("appData"), "PromptHub");
+    dbPath = path.join(defaultDataPath, "data", "prompthub.db");
+    ensurePreUpgradeBackup(dbPath);
+  } else {
+    ensurePreUpgradeBackup(dbPath);
+  }
+  
   const hooks: InitDatabaseHooks = {
     resolveSkillRepoPath,
   };
